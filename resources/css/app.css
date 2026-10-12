@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+
+@theme {
+    /* Font Family */
+    --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --font-display: 'Playfair Display', Georgia, serif;
+
+    /* Eco-Government Color Palette */
+    --color-forest-50: #edf7ee;
+    --color-forest-100: #d1ebd2;
+    --color-forest-200: #a6d5a9;
+    --color-forest-300: #72ba76;
+    --color-forest-400: #3d9943;
+    --color-forest-500: #2d7d33;
+    --color-forest-600: #1f5e25;
+    --color-forest-700: #164219;
+    --color-forest-800: #0e2d11;
+    --color-forest-900: #071709;
+
+    --color-leaf-400: #6abf4b;
+    --color-leaf-500: #52a333;
+    --color-leaf-600: #3d8026;
+
+    --color-slate-800: #1e2a35;
+    --color-slate-900: #0f1820;
+
+    /* Custom Animations */
+    --animate-ken-burns: kenBurns 18s ease-in-out infinite alternate;
+
+    @keyframes kenBurns {
+        0% { transform: scale(1) translateX(0) translateY(0); }
+        100% { transform: scale(1.08) translateX(-2%) translateY(-1%); }
+    }
+}
+
+/* Custom Utilities & Base Styles */
+@layer base {
+    html {
+        scroll-behavior: smooth;
+    }
+}
+
+@layer components {
+    .gradient-text {
+        @apply bg-clip-text text-transparent bg-linear-to-br from-forest-400 to-leaf-400;
+    }
+
+    .reveal {
+        opacity: 0;
+        transform: translateY(28px);
+        transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+
+    .reveal.visible {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    .service-card {
+        @apply transition-all duration-300 ease-in-out hover:-translate-y-1 hover:shadow-2xl hover:shadow-forest-500/10;
+    }
+}

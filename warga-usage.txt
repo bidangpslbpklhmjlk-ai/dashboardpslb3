@@ -1,0 +1,259 @@
+﻿app\Exports\PungutanReportExport.php:23: $headings = ['Nama Warga', 'Kategori'];
+app\Exports\PungutanReportExport.php:35: $row['warga']->nama,
+app\Exports\PungutanReportExport.php:36: $row['warga']->kategori->nama ?? '-',
+app\Http\Controllers\Admin\InvoiceController.php:7: use App\Models\InvoiceWarga;
+app\Http\Controllers\Admin\InvoiceController.php:19: $query = InvoiceWarga::with(['warga', 'kunjungan.petugas']);
+app\Http\Controllers\Admin\InvoiceController.php:25: ->orWhereHas('warga', fn($q2) => $q2->where('nama', 'like', "%{$search}%"));
+app\Http\Controllers\Admin\InvoiceController.php:36: 'total' => InvoiceWarga::count(),
+app\Http\Controllers\Admin\InvoiceController.php:37: 'paid' => InvoiceWarga::where('status', 'paid')->count(),
+app\Http\Controllers\Admin\InvoiceController.php:38: 'unpaid' => InvoiceWarga::where('status', 'unpaid')->count(),
+app\Http\Controllers\Admin\InvoiceController.php:39: 'cancelled' => InvoiceWarga::where('status', 'cancelled')->count(),
+app\Http\Controllers\Admin\InvoiceController.php:40: 'total_pendapatan' => InvoiceWarga::where('status', 'paid')->sum('total'),
+app\Http\Controllers\Admin\InvoiceController.php:95: public function printPungutan(InvoiceWarga $invoiceWarga)
+app\Http\Controllers\Admin\InvoiceController.php:97: if (!$invoiceWarga->qrcode_path) {
+app\Http\Controllers\Admin\InvoiceController.php:98: $filename = 'qrcodes/' . $invoiceWarga->barcode . '.svg';
+app\Http\Controllers\Admin\InvoiceController.php:99: Storage::disk('public')->put($filename, QrCode::size(120)->generate(route('invoice.show', $invoiceWarga->barcode)));
+app\Http\Controllers\Admin\InvoiceController.php:100: $invoiceWarga->update(['qrcode_path' => $filename]);
+app\Http\Controllers\Admin\InvoiceController.php:102: $invoiceWarga->markAsPrinted();
+app\Http\Controllers\Admin\InvoiceController.php:103: return view('admin.invoice.invoice-pungutan-print', compact('invoiceWarga'));
+app\Http\Controllers\Admin\InvoiceController.php:106: public function updateStatusPungutan(Request $request, InvoiceWarga $invoiceWarga)
+app\Http\Controllers\Admin\InvoiceController.php:110: 'paid' => $invoiceWarga->markAsPaid(),
+app\Http\Controllers\Admin\InvoiceController.php:111: 'unpaid' => $invoiceWarga->markAsUnpaid(),
+app\Http\Controllers\Admin\InvoiceController.php:112: 'cancelled' => $invoiceWarga->markAsCancelled(),
+app\Http\Controllers\Admin\InvoiceController.php:114: return response()->json(['success' => true, 'status' => $invoiceWarga->status]);
+app\Http\Controllers\Admin\KategoriWargaController.php:6: use App\Models\KategoriWarga;
+app\Http\Controllers\Admin\KategoriWargaController.php:9: class KategoriWargaController extends Controller
+app\Http\Controllers\Admin\KategoriWargaController.php:13: $kategoris = KategoriWarga::withCount('warga')
+app\Http\Controllers\Admin\KategoriWargaController.php:14: // jumlah entri warga yang BUKAN kolektif (dihitung 1 unit per entri)
+app\Http\Controllers\Admin\KategoriWargaController.php:15: ->withCount(['warga as warga_individu_count' => function ($q) {
+app\Http\Controllers\Admin\KategoriWargaController.php:19: ->withSum(['warga as total_unit_kolektif' => function ($q) {
+app\Http\Controllers\Admin\KategoriWargaController.php:25: return view('admin.kategori-warga.index', compact('kategoris'));
+app\Http\Controllers\Admin\KategoriWargaController.php:30: return view('admin.kategori-warga.create');
+app\Http\Controllers\Admin\KategoriWargaController.php:36: 'nama' => 'required|string|max:100|unique:kategori_warga,nama',
+app\Http\Controllers\Admin\KategoriWargaController.php:40: KategoriWarga::create($validated);
+app\Http\Controllers\Admin\KategoriWargaController.php:42: return redirect()->route('admin.kategori-warga.index')
+app\Http\Controllers\Admin\KategoriWargaController.php:43: ->with('success', 'Kategori warga berhasil ditambahkan');
+app\Http\Controllers\Admin\KategoriWargaController.php:46: public function edit(KategoriWarga $kategoriWarga)
+app\Http\Controllers\Admin\KategoriWargaController.php:48: return view('admin.kategori-warga.edit', compact('kategoriWarga'));
+app\Http\Controllers\Admin\KategoriWargaController.php:51: public function update(Request $request, KategoriWarga $kategoriWarga)
+app\Http\Controllers\Admin\KategoriWargaController.php:54: 'nama' => 'required|string|max:100|unique:kategori_warga,nama,' . $kategoriWarga->id,
+app\Http\Controllers\Admin\KategoriWargaController.php:58: $kategoriWarga->update($validated);
+app\Http\Controllers\Admin\KategoriWargaController.php:60: return redirect()->route('admin.kategori-warga.index')
+app\Http\Controllers\Admin\KategoriWargaController.php:61: ->with('success', 'Kategori warga berhasil diperbarui');
+app\Http\Controllers\Admin\KategoriWargaController.php:64: public function destroy(KategoriWarga $kategoriWarga)
+app\Http\Controllers\Admin\KategoriWargaController.php:66: if ($kategoriWarga->warga()->exists()) {
+app\Http\Controllers\Admin\KategoriWargaController.php:67: return redirect()->route('admin.kategori-warga.index')
+app\Http\Controllers\Admin\KategoriWargaController.php:68: ->with('error', 'Kategori tidak bisa dihapus karena masih dipakai oleh warga terdaftar');
+app\Http\Controllers\Admin\KategoriWargaController.php:71: $kategoriWarga->delete();
+app\Http\Controllers\Admin\KategoriWargaController.php:73: return redirect()->route('admin.kategori-warga.index')
+app\Http\Controllers\Admin\KategoriWargaController.php:74: ->with('success', 'Kategori warga berhasil dihapus');
+app\Http\Controllers\Admin\KunjunganController.php:7: use App\Models\Warga;
+app\Http\Controllers\Admin\KunjunganController.php:8: use App\Models\InvoiceWarga;
+app\Http\Controllers\Admin\KunjunganController.php:23: $query = Kunjungan::with(['warga.kategori', 'petugas', 'invoice']);
+app\Http\Controllers\Admin\KunjunganController.php:27: $query->whereHas('warga', fn($q) => $q->where('nama', 'like', "%{$search}%"));
+app\Http\Controllers\Admin\KunjunganController.php:51: $wargaList = Warga::with('kategori')->where('status', 'aktif')->orderBy('nama')->get();
+app\Http\Controllers\Admin\KunjunganController.php:52: return view('admin.pungutan.create', compact('wargaList'));
+app\Http\Controllers\Admin\KunjunganController.php:58: 'warga_id' => 'required|exists:warga,id',
+app\Http\Controllers\Admin\KunjunganController.php:66: $warga = Warga::with('kategori')->findOrFail($validated['warga_id']);
+app\Http\Controllers\Admin\KunjunganController.php:73: 'warga_id' => $warga->id,
+app\Http\Controllers\Admin\KunjunganController.php:85: InvoiceWarga::whereDate('created_at', today())->count() + 1, 4, '0', STR_PAD_LEFT
+app\Http\Controllers\Admin\KunjunganController.php:90: InvoiceWarga::create([
+app\Http\Controllers\Admin\KunjunganController.php:92: 'warga_id' => $warga->id,
+app\Http\Controllers\Admin\KunjunganController.php:94: 'total' => $warga->kategori->tarif,
+app\Http\Controllers\Admin\KunjunganController.php:108: $kunjungan->load(['warga.kategori', 'petugas', 'invoice']);
+app\Http\Controllers\Admin\KunjunganController.php:149: * Bangun data matrix: baris = warga, kolom = tiap tanggal dalam rentang,
+app\Http\Controllers\Admin\KunjunganController.php:167: $wargaList = Warga::with('kategori')->orderBy('nama')->get();
+app\Http\Controllers\Admin\KunjunganController.php:172: ->groupBy(fn ($k) => $k->warga_id . '_' . $k->waktu_kunjungan->format('Y-m-d'));
+app\Http\Controllers\Admin\KunjunganController.php:177: foreach ($wargaList as $warga) {
+app\Http\Controllers\Admin\KunjunganController.php:180: $key = $warga->id . '_' . $tanggal->format('Y-m-d');
+app\Http\Controllers\Admin\KunjunganController.php:184: $matrix[] = ['warga' => $warga, 'cells' => $cells];
+app\Http\Controllers\Admin\KunjunganController.php:202: return compact('wargaList', 'tanggalRange', 'matrix', 'tanggalMulai', 'tanggalAkhir', 'totalLunas', 'totalBelum', 'totalBatal');
+app\Http\Controllers\Admin\WargaController.php:6: use App\Models\Warga;
+app\Http\Controllers\Admin\WargaController.php:7: use App\Models\KategoriWarga;
+app\Http\Controllers\Admin\WargaController.php:11: class WargaController extends Controller
+app\Http\Controllers\Admin\WargaController.php:15: $query = Warga::with(['kategori', 'pegawai']);
+app\Http\Controllers\Admin\WargaController.php:26: $query->where('kategori_warga_id', $request->kategori_id);
+app\Http\Controllers\Admin\WargaController.php:37: $warga = $query->latest()->paginate(15)->withQueryString();
+app\Http\Controllers\Admin\WargaController.php:38: $kategoriList = KategoriWarga::orderBy('nama')->get();
+app\Http\Controllers\Admin\WargaController.php:41: return view('admin.warga.index', compact('warga', 'kategoriList', 'pegawaiList'));
+app\Http\Controllers\Admin\WargaController.php:46: $kategoriList = KategoriWarga::orderBy('nama')->get();
+app\Http\Controllers\Admin\WargaController.php:49: return view('admin.warga.create', compact('kategoriList', 'pegawaiList'));
+app\Http\Controllers\Admin\WargaController.php:58: $warga = Warga::create($validated);
+app\Http\Controllers\Admin\WargaController.php:59: $warga->pegawai()->sync($pegawaiIds);
+app\Http\Controllers\Admin\WargaController.php:61: return redirect()->route('admin.warga.index')
+app\Http\Controllers\Admin\WargaController.php:62: ->with('success', 'Warga berhasil didaftarkan');
+app\Http\Controllers\Admin\WargaController.php:65: public function edit(Warga $warga)
+app\Http\Controllers\Admin\WargaController.php:67: $kategoriList = KategoriWarga::orderBy('nama')->get();
+app\Http\Controllers\Admin\WargaController.php:70: return view('admin.warga.edit', compact('warga', 'kategoriList', 'pegawaiList'));
+app\Http\Controllers\Admin\WargaController.php:73: public function update(Request $request, Warga $warga)
+app\Http\Controllers\Admin\WargaController.php:79: $warga->update($validated);
+app\Http\Controllers\Admin\WargaController.php:80: $warga->pegawai()->sync($pegawaiIds);
+app\Http\Controllers\Admin\WargaController.php:82: return redirect()->route('admin.warga.index')
+app\Http\Controllers\Admin\WargaController.php:83: ->with('success', 'Data warga berhasil diperbarui');
+app\Http\Controllers\Admin\WargaController.php:86: public function destroy(Warga $warga)
+app\Http\Controllers\Admin\WargaController.php:88: if ($warga->kunjungan()->exists()) {
+app\Http\Controllers\Admin\WargaController.php:89: return redirect()->route('admin.warga.index')
+app\Http\Controllers\Admin\WargaController.php:90: ->with('error', 'Warga tidak bisa dihapus karena sudah punya riwayat kunjungan/pungutan');
+app\Http\Controllers\Admin\WargaController.php:93: $warga->delete();
+app\Http\Controllers\Admin\WargaController.php:95: return redirect()->route('admin.warga.index')
+app\Http\Controllers\Admin\WargaController.php:96: ->with('success', 'Warga berhasil dihapus');
+app\Http\Controllers\Admin\WargaController.php:106: 'kategori_warga_id' => 'required|exists:kategori_warga,id',
+app\Http\Controllers\InvoiceCheckController.php:6: use App\Models\InvoiceWarga;
+app\Http\Controllers\InvoiceCheckController.php:29: $invoiceWarga = null;
+app\Http\Controllers\InvoiceCheckController.php:31: $invoiceWarga = InvoiceWarga::with(['warga', 'kunjungan.petugas'])
+app\Http\Controllers\InvoiceCheckController.php:36: abort_if(!$invoice && !$invoiceWarga, 404);
+app\Http\Controllers\InvoiceCheckController.php:38: return view('invoice.show', compact('invoice', 'invoiceWarga'));
+app\Models\InvoiceWarga.php:7: class InvoiceWarga extends Model
+app\Models\InvoiceWarga.php:9: protected $table = 'invoice_warga';
+app\Models\InvoiceWarga.php:10: protected $fillable = ['kunjungan_id', 'warga_id', 'nomor_invoice', 'total', 'status', 'paid_at', 'printed_at', 'barcode', 'qrcode_path'];
+app\Models\InvoiceWarga.php:14: public function warga() { return $this->belongsTo(Warga::class); }
+app\Models\KategoriWarga.php:8: class KategoriWarga extends Model
+app\Models\KategoriWarga.php:10: protected $table = 'kategori_warga';
+app\Models\KategoriWarga.php:14: public function warga() { return $this->hasMany(Warga::class); }
+app\Models\Kunjungan.php:10: protected $fillable = ['warga_id', 'petugas_id', 'waktu_kunjungan', 'latitude', 'longitude', 'foto', 'catatan', 'status'];
+app\Models\Kunjungan.php:13: public function warga() { return $this->belongsTo(Warga::class); }
+app\Models\Kunjungan.php:15: public function invoice() { return $this->hasOne(InvoiceWarga::class); }
+app\Models\Pegawai.php:26: public function warga()
+app\Models\Pegawai.php:28: return $this->belongsToMany(Warga::class, 'pegawai_warga')->withTimestamps();
+app\Models\Warga.php:7: class Warga extends Model
+app\Models\Warga.php:9: protected $table = 'warga';
+app\Models\Warga.php:12: 'kategori_warga_id',
+app\Models\Warga.php:30: public function kategori() { return $this->belongsTo(KategoriWarga::class, 'kategori_warga_id'); }
+app\Models\Warga.php:34: return $this->belongsToMany(Pegawai::class, 'pegawai_warga')->withTimestamps();
+app\Models\Warga.php:38: public function invoices() { return $this->hasMany(InvoiceWarga::class); }
+routes\web.php:21: use App\Http\Controllers\Admin\KategoriWargaController;
+routes\web.php:22: use App\Http\Controllers\Admin\WargaController;
+routes\web.php:121: Route::get('/invoice-pungutan/{invoiceWarga}/print', [InvoiceController::class, 'printPungutan'])->name('invoice.pungutan.print');
+routes\web.php:122: Route::patch('/invoice-pungutan/{invoiceWarga}/status', [InvoiceController::class, 'updateStatusPungutan'])->name('invoice.pungutan.status');
+routes\web.php:124: // --- WAJIB RETRIBUSI (WARGA) ---
+routes\web.php:125: Route::resource('kategori-warga', KategoriWargaController::class);
+routes\web.php:126: Route::resource('warga', WargaController::class);
+resources\views\admin\invoice\index.blade.php:10: <p class="text-slate-500 mt-1">Daftar invoice retribusi kendaraan & pungutan warga</p>
+resources\views\admin\invoice\index.blade.php:57: placeholder="{{ $sumber === 'pungutan' ? 'Nomor invoice, nama warga...' : 'Nomor invoice, armada, nomor polisi...' }}">
+resources\views\admin\invoice\index.blade.php:85: <p class="text-xs text-slate-500 mt-0.5">Lihat status bayar tiap warga per tanggal, atau unduh sebagai Excel/PDF</p>
+resources\views\admin\invoice\index.blade.php:118: <th class="px-5 py-3.5">Warga</th>
+resources\views\admin\invoice\index.blade.php:138: <div class="font-medium text-slate-900">{{ $invoice->warga->nama ?? '-' }}</div>
+resources\views\admin\invoice\index.blade.php:139: <div class="text-xs text-slate-400">{{ $invoice->warga->alamat ?? '-' }}</div>
+resources\views\admin\kategori-warga\create.blade.php:8: <form action="{{ route('admin.kategori-warga.store') }}" method="POST" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+resources\views\admin\kategori-warga\create.blade.php:23: Tarif ini berlaku per unit. Untuk warga yang didaftarkan sebagai <strong>kolektif</strong>
+resources\views\admin\kategori-warga\create.blade.php:28: <a href="{{ route('admin.kategori-warga.index') }}" class="flex-1 text-center px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50">Batal</a>
+resources\views\admin\kategori-warga\edit.blade.php:3: @section('title', 'Edit Kategori Warga')
+resources\views\admin\kategori-warga\edit.blade.php:9: <a href="{{ route('admin.kategori-warga.index') }}" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+resources\views\admin\kategori-warga\edit.blade.php:13: <h1 class="text-2xl font-bold text-slate-900">Edit Kategori Warga</h1>
+resources\views\admin\kategori-warga\edit.blade.php:14: <p class="text-slate-500 mt-1">{{ $kategoriWarga->nama }}</p>
+resources\views\admin\kategori-warga\edit.blade.php:18: <form action="{{ route('admin.kategori-warga.update', $kategoriWarga) }}" method="POST"
+resources\views\admin\kategori-warga\edit.blade.php:25: <input type="text" name="nama" value="{{ old('nama', $kategoriWarga->nama) }}" required
+resources\views\admin\kategori-warga\edit.blade.php:33: <input type="number" step="0.01" min="0" name="tarif" value="{{ old('tarif', $kategoriWarga->tarif) }}" required
+resources\views\admin\kategori-warga\edit.blade.php:38: Untuk warga <strong>kolektif</strong>, tagihan = tarif × jumlah unit.
+resources\views\admin\kategori-warga\edit.blade.php:42: @if($kategoriWarga->warga()->count() > 0)
+resources\views\admin\kategori-warga\edit.blade.php:44: Kategori ini sedang dipakai oleh <span class="font-semibold text-slate-700">{{ $kategoriWarga->warga()->count() }} warga</span> terdaftar.
+resources\views\admin\kategori-warga\edit.blade.php:49: <a href="{{ route('admin.kategori-warga.index') }}" class="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors">Batal</a>
+resources\views\admin\kategori-warga\index.blade.php:13: <a href="{{ route('admin.kategori-warga.create') }}"
+resources\views\admin\kategori-warga\index.blade.php:41: // total unit tertagih = warga individu (1 unit/entri) + jumlah_unit dari entri kolektif
+resources\views\admin\kategori-warga\index.blade.php:42: $totalUnit = $kategori->warga_individu_count + ($kategori->total_unit_kolektif ?? 0);
+resources\views\admin\kategori-warga\index.blade.php:47: <td class="px-5 py-4 text-center text-slate-600">{{ $kategori->warga_count }}</td>
+resources\views\admin\kategori-warga\index.blade.php:54: <a href="{{ route('admin.kategori-warga.edit', $kategori) }}" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit">
+resources\views\admin\kategori-warga\index.blade.php:57: <form action="{{ route('admin.kategori-warga.destroy', $kategori) }}" method="POST" onsubmit="return confirm('Hapus kategori ini?')">
+resources\views\admin\pungutan\create.blade.php:11: <p class="text-slate-500 mt-1">Catat kunjungan petugas ke warga & terbitkan invoice</p>
+resources\views\admin\pungutan\create.blade.php:20: <label class="block text-sm font-medium text-slate-700 mb-1.5">Warga <span class="text-red-500">*</span></label>
+resources\views\admin\pungutan\create.blade.php:21: <select name="warga_id" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white">
+resources\views\admin\pungutan\create.blade.php:22: <option value="">Pilih warga</option>
+resources\views\admin\pungutan\create.blade.php:23: @foreach($wargaList as $w)
+resources\views\admin\pungutan\create.blade.php:24: <option value="{{ $w->id }}" {{ old('warga_id') == $w->id ? 'selected' : '' }}>
+resources\views\admin\pungutan\create.blade.php:29: @error('warga_id')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+resources\views\admin\pungutan\create.blade.php:30: @if($wargaList->isEmpty())
+resources\views\admin\pungutan\create.blade.php:31: <p class="text-amber-600 text-xs mt-1">Belum ada warga aktif terdaftar. <a href="{{ route('admin.warga.create') }}" class="underline">Daftarkan warga</a> terlebih dahulu.</p>
+resources\views\admin\pungutan\index.blade.php:9: <p class="text-slate-500 mt-1">Riwayat kunjungan petugas ke warga</p>
+resources\views\admin\pungutan\index.blade.php:45: <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase">Cari Warga</label>
+resources\views\admin\pungutan\index.blade.php:46: <input type="text" name="search" value="{{ request('search') }}" placeholder="Nama warga..."
+resources\views\admin\pungutan\index.blade.php:75: <th class="px-5 py-3.5">Warga</th>
+resources\views\admin\pungutan\index.blade.php:87: <div class="font-medium text-slate-800">{{ $k->warga->nama ?? '-' }}</div>
+resources\views\admin\pungutan\index.blade.php:88: <div class="text-xs text-slate-400">{{ $k->warga->kategori->nama ?? '-' }}</div>
+resources\views\admin\pungutan\report-pdf.blade.php:61: <th style="text-align:left;">Nama Warga</th>
+resources\views\admin\pungutan\report-pdf.blade.php:71: <td class="nama">{{ $row['warga']->nama }}</td>
+resources\views\admin\pungutan\report-pdf.blade.php:72: <td class="kategori">{{ $row['warga']->kategori->nama ?? '-' }}</td>
+resources\views\admin\pungutan\report.blade.php:9: <p class="text-slate-500 mt-1">Status bayar tiap warga per tanggal dalam rentang waktu tertentu</p>
+resources\views\admin\pungutan\report.blade.php:70: <th class="px-4 py-3 sticky left-0 bg-slate-50 z-10 min-w-[180px] border-r border-slate-200">Warga</th>
+resources\views\admin\pungutan\report.blade.php:81: {{ $row['warga']->nama }}
+resources\views\admin\pungutan\report.blade.php:84: {{ $row['warga']->kategori->nama ?? '-' }}
+resources\views\admin\pungutan\report.blade.php:101: <tr><td colspan="{{ 2 + $tanggalRange->count() }}" class="px-5 py-12 text-center text-slate-500">Tidak ada data warga.</td></tr>
+resources\views\admin\pungutan\show.blade.php:36: <dt class="text-slate-500">Warga</dt>
+resources\views\admin\pungutan\show.blade.php:37: <dd class="font-medium text-slate-800 mt-0.5">{{ $kunjungan->warga->nama ?? '-' }}</dd>
+resources\views\admin\pungutan\show.blade.php:41: <dd class="font-medium text-slate-800 mt-0.5">{{ $kunjungan->warga->kategori->nama ?? '-' }}</dd>
+resources\views\admin\pungutan\show.blade.php:45: <dd class="font-medium text-slate-800 mt-0.5">{{ $kunjungan->warga->alamat ?? '-' }}</dd>
+resources\views\admin\pungutan\show.blade.php:55: @if($kunjungan->warga->latitude && $kunjungan->warga->longitude)
+resources\views\admin\pungutan\show.blade.php:59: {{ $kunjungan->warga->latitude }}, {{ $kunjungan->warga->longitude }}
+resources\views\admin\pungutan\show.blade.php:60: <a href="https://www.google.com/maps?q={{ $kunjungan->warga->latitude }},{{ $kunjungan->warga->longitude }}" target="_blank" class="text-emerald-600 hover:underline text-xs ml-2">Lihat di Maps ↗</a>
+resources\views\admin\warga\create.blade.php:2: @section('title', 'Daftarkan Warga')
+resources\views\admin\warga\create.blade.php:6: <h1 class="text-2xl font-bold text-slate-900">Daftarkan Warga</h1>
+resources\views\admin\warga\create.blade.php:8: <form action="{{ route('admin.warga.store') }}" method="POST" class="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+resources\views\admin\warga\create.blade.php:15: placeholder="Nama warga, atau nama lokasi jika kolektif (mis: RW 05, Pasar Cikijing)">
+resources\views\admin\warga\create.blade.php:21: <select name="kategori_warga_id" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white">
+resources\views\admin\warga\create.blade.php:24: <option value="{{ $k->id }}" {{ old('kategori_warga_id') == $k->id ? 'selected' : '' }}>{{ $k->nama }} — Rp {{ number_format($k->tarif, 0, ',', '.') }}</option>
+resources\views\admin\warga\create.blade.php:27: @error('kategori_warga_id')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+resources\views\admin\warga\create.blade.php:137: <a href="{{ route('admin.warga.index') }}" class="flex-1 text-center px-4 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50">Batal</a>
+resources\views\admin\warga\edit.blade.php:3: @section('title', 'Edit Data Warga')
+resources\views\admin\warga\edit.blade.php:9: <a href="{{ route('admin.warga.index') }}" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
+resources\views\admin\warga\edit.blade.php:13: <h1 class="text-2xl font-bold text-slate-900">Edit Data Warga</h1>
+resources\views\admin\warga\edit.blade.php:14: <p class="text-slate-500 mt-1">{{ $warga->nama }}</p>
+resources\views\admin\warga\edit.blade.php:18: <form action="{{ route('admin.warga.update', $warga) }}" method="POST"
+resources\views\admin\warga\edit.blade.php:25: <input type="text" name="nama" value="{{ old('nama', $warga->nama) }}" required
+resources\views\admin\warga\edit.blade.php:32: <select name="kategori_warga_id" required class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white">
+resources\views\admin\warga\edit.blade.php:35: <option value="{{ $k->id }}" {{ old('kategori_warga_id', $warga->kategori_warga_id) == $k->id ? 'selected' : '' }}>
+resources\views\admin\warga\edit.blade.php:40: @error('kategori_warga_id')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+resources\views\admin\warga\edit.blade.php:44: $selectedPegawai = old('pegawai_id', $warga->pegawai->pluck('id')->toArray());
+resources\views\admin\warga\edit.blade.php:58: class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm resize-none">{{ old('alamat', $warga->alamat) }}</textarea>
+resources\views\admin\warga\edit.blade.php:73: value="{{ old('latitude', $warga->latitude) }}" required placeholder="Latitude"
+resources\views\admin\warga\edit.blade.php:79: value="{{ old('longitude', $warga->longitude) }}" required placeholder="Longitude"
+resources\views\admin\warga\edit.blade.php:89: <input type="text" name="telepon" value="{{ old('telepon', $warga->telepon) }}" placeholder="0812-3456-7890"
+resources\views\admin\warga\edit.blade.php:98: {{ old('is_kolektif', $warga->is_kolektif) ? 'checked' : '' }}
+resources\views\admin\warga\edit.blade.php:105: <div id="jumlah_unit_wrapper" class="mt-4 {{ old('is_kolektif', $warga->is_kolektif) ? '' : 'hidden' }}">
+resources\views\admin\warga\edit.blade.php:109: <input type="number" min="1" name="jumlah_unit" value="{{ old('jumlah_unit', $warga->jumlah_unit) }}"
+resources\views\admin\warga\edit.blade.php:121: <input type="radio" name="status" value="aktif" {{ old('status', $warga->status) == 'aktif' ? 'checked' : '' }} class="text-emerald-600 focus:ring-emerald-500">
+resources\views\admin\warga\edit.blade.php:125: <input type="radio" name="status" value="nonaktif" {{ old('status', $warga->status) == 'nonaktif' ? 'checked' : '' }} class="text-slate-600 focus:ring-slate-500">
+resources\views\admin\warga\edit.blade.php:132: @if($warga->kunjungan()->count() > 0)
+resources\views\admin\warga\edit.blade.php:134: Warga ini sudah memiliki <span class="font-semibold text-slate-700">{{ $warga->kunjungan()->count() }} riwayat kunjungan</span>.
+resources\views\admin\warga\edit.blade.php:139: <a href="{{ route('admin.warga.index') }}" class="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 transition-colors">Batal</a>
+resources\views\admin\warga\index.blade.php:2: @section('title', 'Wajib Retribusi (Warga)')
+resources\views\admin\warga\index.blade.php:9: <p class="text-slate-500 mt-1">Data warga terdaftar & titik lokasi pungutan</p>
+resources\views\admin\warga\index.blade.php:11: <a href="{{ route('admin.warga.create') }}"
+resources\views\admin\warga\index.blade.php:14: Daftarkan Warga
+resources\views\admin\warga\index.blade.php:26: <form action="{{ route('admin.warga.index') }}" method="GET" class="flex flex-wrap gap-4 items-end">
+resources\views\admin\warga\index.blade.php:60: <a href="{{ route('admin.warga.index') }}" class="px-5 py-2.5 border border-slate-300 text-slate-700 rounded-lg font-medium hover:bg-slate-50 text-sm">Reset</a>
+resources\views\admin\warga\index.blade.php:80: @forelse($warga as $w)
+resources\views\admin\warga\index.blade.php:113: <a href="{{ route('admin.warga.edit', $w) }}" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit">
+resources\views\admin\warga\index.blade.php:116: <form action="{{ route('admin.warga.destroy', $w) }}" method="POST" onsubmit="return confirm('Hapus warga ini?')">
+resources\views\admin\warga\index.blade.php:126: <tr><td colspan="8" class="px-5 py-12 text-center text-slate-500">Belum ada warga terdaftar.</td></tr>
+resources\views\admin\warga\index.blade.php:130: @if($warga->hasPages())
+resources\views\admin\warga\index.blade.php:131: <div class="px-5 py-4 border-t border-slate-200 bg-slate-50">{{ $warga->appends(request()->query())->links('pagination::tailwind') }}</div>
+resources\views\components\admin-sidebar.blade.php:159: <a href="{{ route('admin.warga.index') }}"
+resources\views\components\admin-sidebar.blade.php:160: class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group {{ request()->routeIs('admin.warga.*') ? 'bg-green-50 text-green-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' }}">
+resources\views\components\admin-sidebar.blade.php:161: <svg class="w-5 h-5 {{ request()->routeIs('admin.warga.*') ? 'text-green-700' : 'text-gray-400 group-hover:text-green-700' }} transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+resources\views\components\admin-sidebar.blade.php:167: <a href="{{ route('admin.kategori-warga.index') }}"
+resources\views\components\admin-sidebar.blade.php:168: class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group {{ request()->routeIs('admin.kategori-warga.*') ? 'bg-green-50 text-green-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' }}">
+resources\views\components\admin-sidebar.blade.php:169: <svg class="w-5 h-5 {{ request()->routeIs('admin.kategori-warga.*') ? 'text-green-700' : 'text-gray-400 group-hover:text-green-700' }} transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+resources\views\welcome.blade.php:25: <p class="text-gray-500 max-w-xl mx-auto text-sm">Berbagai layanan lingkungan hidup tersedia untuk warga Kabupaten Majalengka. Klik untuk informasi lebih lanjut.</p>
+resources\views\welcome.blade.php:44: <p class="text-sm text-gray-500">Layanan pengangkutan dan pengelolaan sampah warga.</p>
+database\migrations\2026_08_01_222457_create_kategori_warga_table.php:14: Schema::create('kategori_warga', function (Blueprint $table) {
+database\migrations\2026_08_01_222457_create_kategori_warga_table.php:27: Schema::dropIfExists('kategori_warga');
+database\migrations\2026_08_01_222457_create_warga_table.php:14: Schema::create('warga', function (Blueprint $table) {
+database\migrations\2026_08_01_222457_create_warga_table.php:16: $table->foreignId('kategori_warga_id')->constrained('kategori_warga');
+database\migrations\2026_08_01_222457_create_warga_table.php:32: Schema::dropIfExists('warga');
+database\migrations\2026_08_01_222458_create_kunjungan_table.php:16: $table->foreignId('warga_id')->constrained('warga');
+database\migrations\2026_08_01_222612_create_invoice_warga_table.php:14: Schema::create('invoice_warga', function (Blueprint $table) {
+database\migrations\2026_08_01_222612_create_invoice_warga_table.php:17: $table->foreignId('warga_id')->constrained('warga');
+database\migrations\2026_08_01_222612_create_invoice_warga_table.php:34: Schema::dropIfExists('invoice_warga');
+database\migrations\2026_08_11_110914_add_kolektif_fields_to_warga_table.php:11: Schema::table('warga', function (Blueprint $table) {
+database\migrations\2026_08_11_110914_add_kolektif_fields_to_warga_table.php:12: // Pilihan: kolektif (RW/Pasar/Terminal) atau warga individu
+database\migrations\2026_08_11_110914_add_kolektif_fields_to_warga_table.php:22: Schema::table('warga', function (Blueprint $table) {
+database\migrations\2026_08_13_135816_add_pegawai_id_to_warga_table.php:11: Schema::table('warga', function (Blueprint $table) {
+database\migrations\2026_08_13_135816_add_pegawai_id_to_warga_table.php:14: ->after('kategori_warga_id')
+database\migrations\2026_08_13_135816_add_pegawai_id_to_warga_table.php:22: Schema::table('warga', function (Blueprint $table) {
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:11: // hapus kolom pegawai_id di warga (kalau sudah pernah ditambahkan)
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:12: if (Schema::hasColumn('warga', 'pegawai_id')) {
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:13: Schema::table('warga', function (Blueprint $table) {
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:18: Schema::create('pegawai_warga', function (Blueprint $table) {
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:20: $table->foreignId('warga_id')->constrained('warga')->cascadeOnDelete();
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:24: $table->unique(['warga_id', 'pegawai_id']);
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:30: Schema::dropIfExists('pegawai_warga');
+database\migrations\2026_08_13_155114_update_kolom_warga_add_multiple_pegawai.php:32: Schema::table('warga', function (Blueprint $table) {
