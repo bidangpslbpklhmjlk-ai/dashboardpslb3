@@ -35,6 +35,19 @@
             @error('nama')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
         </div>
 
+                {{-- Jenis lokasi --}}
+        <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Jenis Lokasi <span class="text-red-500">*</span></label>
+            <select name="jenis" required
+                class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white">
+                @foreach (['pengambilan' => 'Titik pengambilan sampah', 'pool' => 'Pool (kantor/garasi armada)', 'tpa' => 'TPA'] as $v => $t)
+                    <option value="{{ $v }}" @selected(old('jenis', $lokasi->jenis ?? 'pengambilan') === $v)>{{ $t }}</option>
+                @endforeach
+            </select>
+            <p class="text-xs text-slate-400 mt-1">Pool: check-in tanpa foto dan berat. TPA: wajib berat, foto opsional. Pengambilan: wajib keduanya.</p>
+            @error('jenis')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+        </div>
+
         {{-- Kecamatan & Desa --}}
         @include('admin.lokasi._wilayah')
 

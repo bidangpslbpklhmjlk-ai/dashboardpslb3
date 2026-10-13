@@ -20,6 +20,7 @@ class LokasiAngkut extends Model
         'aktif',
         'kecamatan',
         'desa',
+        'jenis',
     ];
 
     protected $casts = [

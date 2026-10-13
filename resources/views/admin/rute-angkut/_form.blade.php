@@ -90,7 +90,7 @@
 
         <div class="bg-white border border-slate-200/80 rounded-2xl p-5">
             <h2 class="text-sm font-bold text-slate-800">Urutan Rute</h2>
-            <p class="text-xs text-slate-500 mb-3">Tarik <span class="font-semibold">⋮⋮</span> untuk mengubah urutan. Rute dilalui dari nomor 1 ke bawah.</p>
+            <p class="text-xs text-slate-500 mb-3">Tarik <span class="font-semibold">⋮⋮</span> untuk mengubah urutan. Lokasi yang sama boleh ditambah lagi untuk ritasi berikutnya. Angka hijau di kanan adalah jarak ke titik berikutnya.</p>
             <ol id="selected-list" class="space-y-2"></ol>
             <p id="selected-empty" class="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400">
                 Belum ada lokasi. Klik lokasi di sebelah kiri untuk menambahkan.
@@ -141,14 +141,23 @@
         return e;
     };
     const wilayah = (l) => [l.desa, l.kecamatan].filter(Boolean).join(', ') || 'Wilayah belum diisi';
+    const km = (n) => n.toFixed(1).replace('.', ',') + ' km';
+
+    // Jarak ke titik berikutnya, diisi setelah OSRM menjawab
+    function setLegs(arr) {
+        Array.from(selEl.children).forEach((li, i) => {
+            const s = li.querySelector('.leg');
+            if (s) s.textContent = arr[i] != null ? '→ ' + km(arr[i]) : '';
+        });
+    }
 
     function renderAvailable() {
         const q = searchEl.value.trim().toLowerCase();
         const kec = kecEl.value;
         availEl.replaceChildren();
 
+        // Lokasi yang sudah dipilih tetap tampil: boleh dipakai lagi untuk ritasi berikutnya
         const items = LIST.filter((l) =>
-            !selected.includes(l.id) &&
             (!kec || l.kecamatan === kec) &&
             (!q || (l.nama + ' ' + (l.desa || '') + ' ' + (l.kecamatan || '')).toLowerCase().includes(q))
         );
@@ -159,11 +168,12 @@
         }
 
         items.forEach((l) => {
+            const n = selected.filter((x) => x === l.id).length;
             const b = el('button', 'w-full text-left px-3 py-2 flex items-center justify-between gap-3 border-b border-slate-100 last:border-0 hover:bg-green-50');
             b.type = 'button';
             const left = el('div');
             left.append(el('p', 'text-sm font-medium text-slate-800', l.nama), el('p', 'text-xs text-slate-500', wilayah(l)));
-            b.append(left, el('span', 'text-xs font-semibold text-green-700 whitespace-nowrap', '+ Tambah'));
+            b.append(left, el('span', 'text-xs font-semibold text-green-700 whitespace-nowrap', n ? '+ Tambah lagi (' + n + '×)' : '+ Tambah'));
             b.addEventListener('click', () => { selected.push(l.id); refresh(); });
             availEl.append(b);
         });
@@ -182,6 +192,7 @@
             const num = el('span', 'w-6 h-6 shrink-0 rounded-full bg-green-700 text-white text-xs font-bold flex items-center justify-center', String(i + 1));
             const info = el('div', 'flex-1 min-w-0');
             info.append(el('p', 'text-sm font-medium text-slate-800 truncate', l.nama), el('p', 'text-xs text-slate-500 truncate', wilayah(l)));
+            const leg = el('span', 'leg text-[11px] font-semibold text-emerald-700 whitespace-nowrap', '');
 
             const input = document.createElement('input');
             input.type = 'hidden';
@@ -190,14 +201,17 @@
 
             const rm = el('button', 'text-slate-400 hover:text-red-600 text-sm px-1', '✕');
             rm.type = 'button';
-            rm.title = 'Hapus dari rute';
-            rm.addEventListener('click', () => { selected = selected.filter((x) => x !== id); refresh(); });
+            rm.title = 'Hapus titik ini dari rute';
+            // Hapus hanya baris ini, bukan semua kemunculan lokasi yang sama
+            rm.addEventListener('click', () => { selected.splice(i, 1); refresh(); });
 
-            li.append(handle, num, info, input, rm);
+            li.append(handle, num, info, leg, input, rm);
             selEl.append(li);
         });
     }
 
+    renderAvailable();
+    renderSelected();
     // --- Peta pratinjau ---
     const map = L.map('preview-map').setView([-6.8366, 108.2274], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -208,11 +222,13 @@
     let timer = null;
     let reqId = 0;
 
-    const numIcon = (n) => L.divIcon({
+    // Lokasi yang dikunjungi berulang mendapat satu penanda dengan nomor gabungan, mis. "2,4"
+    const numIcon = (label) => L.divIcon({
         className: '',
-        iconSize: [24, 24],
-        iconAnchor: [12, 12],
-        html: '<div style="width:24px;height:24px;border-radius:9999px;background:#15803d;color:#fff;font:700 12px/24px sans-serif;text-align:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.35)">' + n + '</div>'
+        iconSize: [0, 0],
+        html: '<div style="transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;' +
+              'min-width:24px;height:24px;padding:0 6px;border-radius:12px;border:2px solid #fff;background:#15803d;' +
+              'color:#fff;font:700 11px/1 sans-serif;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.35)">' + label + '</div>'
     });
 
     function fit() {
@@ -221,12 +237,21 @@
 
     async function drawMap() {
         layer.clearLayers();
+        setLegs([]);
         const pts = selected.map((id) => BY_ID[id]);
 
-        pts.forEach((l, i) => L.marker([l.lat, l.lng], { icon: numIcon(i + 1) }).bindTooltip(l.nama).addTo(layer));
+        const grup = {};
+        selected.forEach((id, i) => {
+            (grup[id] = grup[id] || { l: BY_ID[id], no: [] }).no.push(i + 1);
+        });
+        Object.values(grup).forEach((g) =>
+            L.marker([g.l.lat, g.l.lng], { icon: numIcon(g.no.join(',')) })
+                .bindTooltip('Urutan ' + g.no.join(', ') + ': ' + g.l.nama)
+                .addTo(layer)
+        );
 
         if (pts.length < 2) {
-            distEl.textContent = pts.length ? '0 km (butuh minimal 2 lokasi untuk garis rute)' : '-';
+            distEl.textContent = pts.length ? '0 km (butuh minimal 2 titik untuk garis rute)' : '-';
             fit();
             return;
         }
@@ -241,9 +266,10 @@
             if (mine !== reqId) return;
 
             if (data.code === 'Ok' && data.routes && data.routes.length) {
-                const line = data.routes[0].geometry.coordinates.map((c) => [c[1], c[0]]);
-                L.polyline(line, { color: '#15803d', weight: 5, opacity: 0.85 }).addTo(layer);
-                distEl.textContent = (data.routes[0].distance / 1000).toFixed(2) + ' km';
+                const r = data.routes[0];
+                L.polyline(r.geometry.coordinates.map((c) => [c[1], c[0]]), { color: '#15803d', weight: 5, opacity: 0.85 }).addTo(layer);
+                distEl.textContent = 'Total ' + km(r.distance / 1000) + ' · ' + pts.length + ' titik';
+                setLegs((r.legs || []).map((x) => x.distance / 1000));
                 fit();
                 return;
             }
@@ -262,14 +288,16 @@
         timer = setTimeout(drawMap, 400);
     }
 
-    Sortable.create(selEl, {
-        handle: '.drag-handle',
-        animation: 150,
-        onEnd: () => {
-            selected = Array.from(selEl.children).map((li) => Number(li.dataset.id));
-            refresh();
-        }
-    });
+    if (window.Sortable) {
+        Sortable.create(selEl, {
+            handle: '.drag-handle',
+            animation: 150,
+            onEnd: () => {
+                selected = Array.from(selEl.children).map((li) => Number(li.dataset.id));
+                refresh();
+            }
+        });
+    }
 
     searchEl.addEventListener('input', renderAvailable);
     kecEl.addEventListener('change', renderAvailable);

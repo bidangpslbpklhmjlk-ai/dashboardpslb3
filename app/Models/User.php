@@ -100,10 +100,8 @@ class User extends Authenticatable
     }
 
     /** Nama route halaman pertama yang boleh dibuka (untuk redirect setelah login). */
-    public function homeRoute(): ?string
-    {
-        $first = collect($this->allowedMenus())->first();
-
-        return $first['route'] ?? null;
-    }
+public function homeRoute(): ?string
+{
+    return $this->is_active ? 'admin.dashboard' : null;
+}
 }

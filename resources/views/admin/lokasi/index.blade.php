@@ -97,6 +97,15 @@
                     @endforeach
                 </select>
             </div>
+                        <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase tracking-wide">Jenis</label>
+                <select name="jenis" class="w-40 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white">
+                    <option value="">Semua</option>
+                    <option value="pengambilan" {{ request('jenis') === 'pengambilan' ? 'selected' : '' }}>Pengambilan</option>
+                    <option value="pool" {{ request('jenis') === 'pool' ? 'selected' : '' }}>Pool</option>
+                    <option value="tpa" {{ request('jenis') === 'tpa' ? 'selected' : '' }}>TPA</option>
+                </select>
+            </div>
             <div>
                 <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase tracking-wide">Status</label>
                 <select name="aktif" class="w-40 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm bg-white">
@@ -115,11 +124,12 @@
     {{-- Tabel: bisa digeser horizontal & vertikal --}}
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
         <div class="overflow-auto" style="max-height: 520px;">
-            <table class="w-full text-left text-sm" style="min-width: 960px;">
+            <table class="w-full text-left text-sm" style="min-width: 1040px;">
                 <thead class="bg-slate-50 text-slate-600 font-semibold border-b border-slate-200 sticky top-0 z-10">
                     <tr>
                         <th class="px-4 py-3.5 w-12 bg-slate-50">No</th>
                         <th class="px-4 py-3.5 whitespace-nowrap bg-slate-50">Nama Lokasi</th>
+                        <th class="px-4 py-3.5 whitespace-nowrap bg-slate-50">Jenis</th>
                         <th class="px-4 py-3.5 whitespace-nowrap bg-slate-50">Desa / Kelurahan</th>
                         <th class="px-4 py-3.5 whitespace-nowrap bg-slate-50">Kecamatan</th>
                         <th class="px-4 py-3.5 whitespace-nowrap bg-slate-50">Alamat</th>
@@ -133,6 +143,15 @@
                     <tr class="hover:bg-slate-50 transition-colors">
                         <td class="px-4 py-3 text-slate-400">{{ $lokasis->firstItem() + $loop->index }}</td>
                         <td class="px-4 py-3 font-semibold text-slate-800 whitespace-nowrap">{{ $lokasi->nama }}</td>
+                        <td class="px-4 py-3 whitespace-nowrap">
+    @php
+        $jenisBadge = [
+            'pool' => ['Pool', 'bg-blue-100 text-blue-700'],
+            'tpa'  => ['TPA', 'bg-amber-100 text-amber-700'],
+        ][$lokasi->jenis] ?? ['Pengambilan', 'bg-slate-100 text-slate-600'];
+    @endphp
+    <span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium {{ $jenisBadge[1] }}">{{ $jenisBadge[0] }}</span>
+</td>
                         <td class="px-4 py-3 whitespace-nowrap">
                             @if($lokasi->desa)
                                 {{ $lokasi->desa }}
@@ -179,7 +198,7 @@
                     </tr>
                     @empty
                     <tr>
-                        <td colspan="8" class="px-5 py-12 text-center text-slate-500">
+                        <td colspan="9" class="px-5 py-12 text-center text-slate-500">
                             Belum ada lokasi angkut. Klik "Tambah Lokasi" untuk membuat yang pertama.
                         </td>
                     </tr>

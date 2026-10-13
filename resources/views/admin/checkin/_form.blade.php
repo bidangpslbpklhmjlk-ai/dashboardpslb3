@@ -1,4 +1,5 @@
 @php
+    $jenis = $jenis ?? 'pengambilan';
     $edit = $c !== null;
     $baris = $edit
         ? $c->sampah->map(fn ($s) => ['j' => $s->jenis_sampah_id, 'b' => $s->berat_kg])->values()->all()
@@ -20,8 +21,7 @@
     @endunless
 
     <label>Waktu check-in<br><input type="datetime-local" name="waktu_kejadian" value="{{ $waktu }}" required></label>
-    <label>Ritasi ke<br><input type="number" name="ritasi_ke" min="1" max="20" value="{{ $edit ? $c->ritasi_ke : 1 }}" required style="width:80px"></label>
-
+@if ($jenis !== 'pool')
     <div>
         <div style="font-size:13px;margin-bottom:4px">Jenis &amp; berat sampah</div>
         <div class="ck-rows" data-next="{{ count($baris) }}">
@@ -52,7 +52,7 @@
         </template>
         <button type="button" onclick="ckTambah(this)" style="margin-top:4px">+ Jenis sampah</button>
     </div>
-
+@endif
     @if ($edit && $c->fotos->isNotEmpty())
         <div style="font-size:13px">Centang untuk menghapus foto:
             @foreach ($c->fotos as $f)
@@ -62,7 +62,12 @@
         </div>
     @endif
 
-    <label>Foto{{ $edit ? ' (tambahan)' : '' }}<br><input type="file" name="foto[]" accept="image/*" multiple capture="environment"></label>
+    @if ($jenis !== 'pool')
+    <label>Foto{{ $edit ? ' (tambahan)' : '' }}{{ $jenis === 'pengambilan' && ! $edit ? ' (wajib)' : '' }}<br>
+        <input type="file" name="foto[]" accept="image/*" multiple capture="environment"
+               @if ($jenis === 'pengambilan' && ! $edit) required @endif>
+    </label>
+@endif
     <label>Catatan<br><input type="text" name="catatan" maxlength="500" value="{{ $edit ? $c->catatan : '' }}" style="width:100%"></label>
 
     @if ($edit)

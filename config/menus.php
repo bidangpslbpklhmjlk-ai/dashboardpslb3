@@ -11,9 +11,9 @@
  */
 return [
     // Utama
-    'halaman'       => ['label' => 'Kelola Halaman',        'route' => 'admin.pages.index',         'group' => 'Utama'],
-    'berita'        => ['label' => 'Berita Carousel',       'route' => 'admin.berita.index',        'group' => 'Utama'],
-    'akuntabilitas' => ['label' => 'Dokumen Akuntabilitas', 'route' => 'admin.akuntabilitas.index', 'group' => 'Utama'],
+     // 'halaman'       => ['label' => 'Kelola Halaman',        'route' => 'admin.pages.index',         'group' => 'Utama'],
+    // 'berita'        => ['label' => 'Berita Carousel',       'route' => 'admin.berita.index',        'group' => 'Utama'],
+    // 'akuntabilitas' => ['label' => 'Dokumen Akuntabilitas', 'route' => 'admin.akuntabilitas.index', 'group' => 'Utama'],
     'armada'        => ['label' => 'Data Armada',           'route' => 'admin.armada.index',        'group' => 'Utama'],
     'rute-angkut'   => ['label' => 'Rute Pengangkutan',     'route' => 'admin.rute-angkut.index',   'group' => 'Utama'],
     'gatepass'      => ['label' => 'TPA (Gatepass)',        'route' => 'admin.gatepass.index',      'group' => 'Utama', 'nav' => 'TPA'],

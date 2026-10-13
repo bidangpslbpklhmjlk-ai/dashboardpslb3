@@ -177,7 +177,6 @@ class NeracaSampahAnalisis
 
         return $bulan;
     }
-
     /**
      * Neraca satu bulan (ton/bulan), bentuk datanya sama dengan NeracaSampahService::neraca().
      * Asumsi: timbulan = organik + anorganik + residu, terkelola = organik + anorganik.

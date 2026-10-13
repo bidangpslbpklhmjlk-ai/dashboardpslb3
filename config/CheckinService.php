@@ -92,11 +92,11 @@ class CheckinService
                 'sumber'         => 'manual',
             ]);
 
-            $this->pastikanUnik($row->id, $lid, (int) $d['ritasi_ke'], null);
+
 
             $c = Checkin::create([
                 'penugasan_id'     => $row->id,
-                'ritasi_ke'        => $d['ritasi_ke'],
+                'ritasi_ke'        => 1,
                 'lokasi_angkut_id' => $lid,
                 'waktu_kejadian'   => $d['waktu_kejadian'],
                 'sumber'           => 'admin',
@@ -111,7 +111,8 @@ class CheckinService
             if ($row->status === 'direncanakan') {
                 $row->update(['status' => 'berjalan']);
             }
-            return $c;
+            $this->hitungUlangRitasi((int) $row->armada_id, $tgl->toDateString());
+            return $c->fresh();
         });
     }
 
@@ -124,13 +125,12 @@ class CheckinService
             if (Carbon::parse($d['waktu_kejadian'])->toDateString() !== $tgl->toDateString()) {
                 throw ValidationException::withMessages(['waktu_kejadian' => 'Waktu check-in harus berada di tanggal penugasan (' . $tgl->format('d/m/Y') . ').']);
             }
-            $this->pastikanUnik($c->penugasan_id, $c->lokasi_angkut_id, (int) $d['ritasi_ke'], $c->id);
+            
 
             $flag = $c->flag ?? [];
             $flag['direvisi_admin'] = $userId;
 
             $c->update([
-                'ritasi_ke'      => $d['ritasi_ke'],
                 'waktu_kejadian' => $d['waktu_kejadian'],
                 'catatan'        => $d['catatan'] ?? null,
                 'alasan_manual'  => $d['alasan_manual'],
@@ -147,14 +147,17 @@ class CheckinService
             }
             $this->simpanFoto($c, $foto);
 
-            return $c;
+            $this->hitungUlangRitasi((int) $c->penugasan->armada_id, $tgl->toDateString());
+            return $c->fresh();
         });
     }
 
     /** Soft delete: riwayat tetap ada di database. */
     public function hapus(Checkin $c): void
     {
+        $penugasan = $c->penugasan;
         $c->delete();
+        $this->hitungUlangRitasi((int) $penugasan->armada_id, $penugasan->tanggal->toDateString());
     }
 
     // ---------------------------------------------------------------------
@@ -192,6 +195,29 @@ class CheckinService
                 'checkin_id' => $c->id,
                 'path'       => $f->store('checkin/' . now()->format('Y/m'), 'public'),
             ]);
+        }
+    }
+        /** Hitung ulang ritasi_ke semua check-in satu armada pada satu tanggal. */
+    public function hitungUlangRitasi(int $armadaId, string $tanggal): void
+    {
+        $items = Checkin::query()
+            ->join('penugasan_harian as p', 'p.id', '=', 'checkins.penugasan_id')
+            ->join('lokasi_angkuts as l', 'l.id', '=', 'checkins.lokasi_angkut_id')
+            ->where('p.armada_id', $armadaId)
+            ->whereDate('p.tanggal', $tanggal)
+            ->where('p.status', '!=', 'batal')
+            ->orderBy('checkins.waktu_kejadian')
+            ->orderBy('checkins.id')
+            ->get(['checkins.id', 'checkins.ritasi_ke', 'l.jenis']);
+
+        $ritasi = 1;
+        foreach ($items as $it) {
+            if ((int) $it->ritasi_ke !== $ritasi) {
+                Checkin::whereKey($it->id)->update(['ritasi_ke' => $ritasi]);
+            }
+            if ($it->jenis === 'tpa') {
+                $ritasi++;
+            }
         }
     }
 }

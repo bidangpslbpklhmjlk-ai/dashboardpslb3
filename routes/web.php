@@ -31,6 +31,7 @@ use App\Http\Controllers\Admin\CheckinController;
 use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PeranController;
 use App\Http\Controllers\Admin\NeracaSampahController;
+use App\Http\Controllers\Admin\DashboardController;
 
 // ==========================================
 // TES
@@ -67,12 +68,9 @@ Route::post('/admin/logout', [AuthController::class, 'logout'])->name('admin.log
 // ==========================================
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
 
-    // --- BERANDA: arahkan ke menu pertama yang boleh dibuka ---
-    Route::get('/', function () {
-        $route = auth()->user()->homeRoute();
-        abort_unless($route, 403, 'Akun Anda belum memiliki akses menu. Hubungi superadmin.');
-        return redirect()->route($route);
-    })->name('home');
+    // --- BERANDA & DASHBOARD ---
+    Route::get('/', fn () => redirect()->route('admin.dashboard'))->name('home');
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
 
     // --- MANAJEMEN PENGGUNA (hanya superadmin) ---
     Route::middleware('menu:pengguna')->group(function () {
@@ -139,6 +137,8 @@ Route::middleware('menu:armada')->group(function () {
         Route::post('checkin', [CheckinController::class, 'store'])->name('checkin.store');
         Route::put('checkin/{checkin}', [CheckinController::class, 'update'])->name('checkin.update');
         Route::delete('checkin/{checkin}', [CheckinController::class, 'destroy'])->name('checkin.destroy');
+        Route::post('checkin/pengecualian', [CheckinController::class, 'pengecualian'])->name('checkin.pengecualian');
+        Route::delete('checkin/pengecualian/{pengecualian}', [CheckinController::class, 'hapusPengecualian'])->name('checkin.pengecualian.hapus');
     });
 
     // --- ARMADA RUSAK & PENGALIHAN ---

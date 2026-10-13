@@ -44,6 +44,7 @@ class RuteAngkutController extends Controller
         $kecamatan = collect();
         foreach ($aktif as $rute) {
             foreach ($rute->lokasis as $lokasi) {
+                if (($lokasi->jenis ?? 'pengambilan') !== 'pengambilan') continue;
                 if ($lokasi->kecamatan) {
                     $kecamatan->push($lokasi->kecamatan);
                     if ($lokasi->desa) {
@@ -80,6 +81,7 @@ class RuteAngkutController extends Controller
                 'jarak'    => (float) $rute->total_jarak,
                 'geometry' => $geometry,
                 'points'   => $rute->lokasis->map(fn ($l) => [
+                    'id'        => $l->id,
                     'lat'       => (float) $l->latitude,
                     'lng'       => (float) $l->longitude,
                     'name'      => $l->nama,
@@ -190,12 +192,12 @@ private function validated(Request $request, ?int $currentArmadaId = null): arra
         'nama'           => ['nullable', 'string', 'max:100'],
         'hari'           => ['required', Rule::in(self::HARI)],
         'lokasi_ids'     => ['required', 'array', 'min:1'],
-        'lokasi_ids.*'   => ['integer', 'distinct', 'exists:lokasi_angkuts,id'],
+        'lokasi_ids.*'   => ['integer', 'exists:lokasi_angkuts,id'],
     ], [
         'armada_id.exists'    => 'Armada harus bertipe Dinas LH.',
         'lokasi_ids.required' => 'Pilih minimal satu lokasi pengambilan.',
         'lokasi_ids.min'      => 'Pilih minimal satu lokasi pengambilan.',
-        'lokasi_ids.*.distinct' => 'Satu lokasi tidak boleh dipilih dua kali dalam rute yang sama.',
+        'lokasi_ids.*.exists' => 'Ada lokasi yang tidak ditemukan. Muat ulang halaman lalu coba lagi.',
     ]);
 }
 
@@ -212,26 +214,23 @@ private function validated(Request $request, ?int $currentArmadaId = null): arra
             ->values()
             ->all();
 
-$dipakai = $this->lokasiDipakai($rute?->id);
 
 $lokasiData = LokasiAngkut::query()
-    ->where(fn ($q) => $q
-        ->where(fn ($a) => $a->where('aktif', true)->whereNotIn('id', $dipakai))
-        ->orWhereIn('id', $selectedIds)
-    )
+    ->where(fn ($q) => $q->where('aktif', true)->orWhereIn('id', $selectedIds))
     ->whereNotNull('latitude')
-            ->whereNotNull('longitude')
-            ->orderBy('nama')
-            ->get()
-            ->map(fn ($l) => [
-                'id'        => $l->id,
-                'nama'      => $l->nama,
-                'desa'      => $l->desa,
-                'kecamatan' => $l->kecamatan,
-                'lat'       => (float) $l->latitude,
-                'lng'       => (float) $l->longitude,
-            ])
-            ->values();
+    ->whereNotNull('longitude')
+    ->orderBy('nama')
+    ->get()
+    ->map(fn ($l) => [
+        'id'        => $l->id,
+        'nama'      => $l->nama,
+        'jenis'     => $l->jenis, 
+        'desa'      => $l->desa,
+        'kecamatan' => $l->kecamatan,
+        'lat'       => (float) $l->latitude,
+        'lng'       => (float) $l->longitude,
+    ])
+    ->values();
 
         $kecamatanList = config('wilayah.kecamatan', []);
         sort($kecamatanList);
@@ -276,14 +275,14 @@ private function lokasiDipakai(?int $exceptRuteId = null): array
         ->all();
 }
 
-    private function syncLokasi(RuteAngkut $rute, array $ids): void
-    {
-        $sync = [];
-        foreach ($ids as $i => $id) {
-            $sync[$id] = ['urutan' => $i + 1];
-        }
-        $rute->lokasis()->sync($sync);
+private function syncLokasi(RuteAngkut $rute, array $ids): void
+{
+    $rute->lokasis()->detach();
+
+    foreach (array_values($ids) as $i => $id) {
+        $rute->lokasis()->attach($id, ['urutan' => $i + 1]);
     }
+}
 
     /**
      * Hitung jarak dan garis rute lewat OSRM sesuai urutan lokasi.

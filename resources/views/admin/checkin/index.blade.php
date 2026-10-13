@@ -55,6 +55,8 @@
     .ck-item { border-top:1px solid #f1f5f9; margin-top:10px; padding-top:10px; font-size:13px; color:#334155; line-height:1.5; }
     .ck-fotos { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; }
     .ck-foto { width:64px; height:64px; object-fit:cover; border-radius:8px; border:1px solid #e2e8f0; }
+    .ck-info { background:#fef9c3; color:#854d0e; border:1px solid #fde68a; padding:10px 14px; border-radius:10px; margin-bottom:14px; font-size:14px; }
+    .ck-pgc { background:#fff; border:1px solid #fecaca; border-radius:12px; padding:12px 14px; margin-bottom:10px; }
 
     /* Detail (Revisi / + Check-in) */
     details > summary { cursor:pointer; display:inline-block; margin-top:8px; font-size:13px; font-weight:600; color:#15803d; list-style:none; }
@@ -96,6 +98,47 @@
     <button type="submit">Tampilkan</button>
 </form>
 
+@php $k = $kelengkapan; @endphp
+@if ($k['belum']->isNotEmpty())
+    <div class="{{ $k['kembali'] ? 'ck-err' : 'ck-info' }}">
+        @if ($k['kembali'])
+            <strong>Armada sudah kembali ke pool, tetapi {{ $k['belum']->count() }} lokasi belum diambil.</strong>
+            Isi status dan alasan untuk tiap lokasi di bawah.
+        @else
+            {{ $k['belum']->count() }} lokasi belum diambil: {{ $k['belum']->map(fn ($x) => \App\Support\Label::of($x))->join(', ') }}.
+        @endif
+    </div>
+
+    @if ($k['kembali'])
+        @foreach ($k['belum'] as $lok)
+            <form method="POST" action="{{ route('admin.checkin.pengecualian') }}" class="ck-form ck-pgc">
+                @csrf
+                <input type="hidden" name="tanggal" value="{{ $tanggal->toDateString() }}">
+                <input type="hidden" name="armada" value="{{ $armadaId }}">
+                <input type="hidden" name="lokasi_angkut_id" value="{{ $lok->id }}">
+                <div class="ck-sub">{{ \App\Support\Label::of($lok) }}</div>
+                <label>Status<br>
+                    <select name="status"
+                            onchange="this.form.querySelector('.ck-pengganti').style.display = this.value === 'diambil_armada_lain' ? 'block' : 'none'">
+                        <option value="tidak_diambil">Tidak diambil</option>
+                        <option value="diambil_armada_lain">Diambil armada lain</option>
+                    </select>
+                </label>
+                <label class="ck-pengganti" style="display:none">Armada yang mengambil<br>
+                    <select name="armada_pengganti_id">
+                        <option value="">- pilih armada -</option>
+                        @foreach ($armadaPengganti as $a)
+                            <option value="{{ $a->id }}">{{ $a->nomor_polisi }} - {{ $a->nama }}</option>
+                        @endforeach
+                    </select>
+                </label>
+                <label>Alasan (wajib)<br><input type="text" name="alasan" maxlength="255" required style="width:100%"></label>
+                <button type="submit">Simpan alasan</button>
+            </form>
+        @endforeach
+    @endif
+@endif
+
 @forelse ($blok as $b)
     <div class="ck-rute">
         <h3>{{ \App\Support\Label::of($b['rute']) }}</h3>
@@ -105,10 +148,21 @@
     <div class="ck-lok-head">
         <span class="ck-no">{{ $i + 1 }}</span>
         <strong>{{ \App\Support\Label::of($l['lokasi']) }}</strong>
-        @if ($l['checkins']->isEmpty())
-            <span class="ck-badge ck-belum">Belum check-in</span>
-        @else
+        @php $pg = $kelengkapan['pengecualian']->get($l['lokasi']->id); @endphp
+        @if ($l['checkins']->isNotEmpty())
             <span class="ck-badge ck-sudah">{{ $l['checkins']->count() }} check-in</span>
+        @elseif ($pg)
+            <span class="ck-badge ck-belum">
+                {{ $pg->status === 'diambil_armada_lain' ? 'Diambil ' . ($pg->pengganti->nomor_polisi ?? 'armada lain') : 'Tidak diambil' }}: {{ $pg->alasan }}
+            </span>
+            <form method="POST" action="{{ route('admin.checkin.pengecualian.hapus', $pg) }}" onsubmit="return confirm('Batalkan alasan ini?')" style="display:inline">
+                @csrf @method('DELETE')
+                <input type="hidden" name="tanggal" value="{{ $tanggal->toDateString() }}">
+                <input type="hidden" name="armada" value="{{ $armadaId }}">
+                <button type="submit" class="ck-link-danger" style="margin:0">Batalkan</button>
+            </form>
+        @else
+            <span class="ck-badge ck-belum">Belum check-in</span>
         @endif
     </div>
 
@@ -132,10 +186,10 @@
                             @endforeach
                         </div>
 
-                        <details>
-                            <summary>Revisi</summary>
-                            @include('admin.checkin._form', ['c' => $c, 'ruteId' => $b['rute']->id, 'lokasiId' => $l['lokasi']->id])
-                        </details>
+<details>
+    <summary>+ Check-in</summary>
+    @include('admin.checkin._form', ['c' => null, 'ruteId' => $b['rute']->id, 'lokasiId' => $l['lokasi']->id, 'jenis' => $l['lokasi']->jenis])
+</details>
                         <form method="POST" action="{{ route('admin.checkin.destroy', $c) }}" onsubmit="return confirm('Hapus check-in ini?')" style="margin-top:4px">
                             @csrf @method('DELETE')
                             <input type="hidden" name="tanggal" value="{{ $tanggal->toDateString() }}">
@@ -147,7 +201,7 @@
 
                 <details>
                     <summary>+ Check-in</summary>
-                    @include('admin.checkin._form', ['c' => null, 'ruteId' => $b['rute']->id, 'lokasiId' => $l['lokasi']->id])
+                    @include('admin.checkin._form', ['c' => null, 'ruteId' => $b['rute']->id, 'lokasiId' => $l['lokasi']->id, 'jenis' => $l['lokasi']->jenis])
                 </details>
             </div>
         @endforeach

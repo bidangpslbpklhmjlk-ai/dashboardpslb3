@@ -28,7 +28,9 @@ class LokasiAngkutController extends Controller
     if ($request->filled('kecamatan')) {
         $query->where('kecamatan', $request->kecamatan);
     }
-
+    if ($request->filled('jenis')) {
+        $query->where('jenis', $request->jenis);
+    }
     if ($request->has('aktif') && $request->aktif !== '') {
         $query->where('aktif', $request->aktif);
     }
@@ -221,6 +223,7 @@ class LokasiAngkutController extends Controller
                 'longitude'  => $data['longitude'],
                 'keterangan' => trim($data['keterangan'] ?? ''),
                 'aktif'      => $aktif,
+                'jenis' => 'pengambilan'
             ]);
 
             $inserted++;
@@ -251,6 +254,7 @@ class LokasiAngkutController extends Controller
             'latitude'   => 'required|numeric|between:-90,90',
             'longitude'  => 'required|numeric|between:-180,180',
             'keterangan' => 'nullable|string|max:500',
+            'jenis'      => ['required', Rule::in(['pool', 'pengambilan', 'tpa'])],
         ];
     }
 

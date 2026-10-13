@@ -132,7 +132,7 @@
                 </div>
                 <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-600">
                     <span><strong class="text-slate-900">{{ $items->count() }}</strong> rute ({{ $jumlahAktif }} aktif)</span>
-                    <span><strong class="text-slate-900">{{ $lokasiGrup }}</strong> lokasi</span>
+                    <span><strong class="text-slate-900">{{ $lokasiGrup }}</strong> titik singgah</span>
                     <span><strong class="text-slate-900">{{ number_format($jarakGrup, 2, ',', '.') }}</strong> km</span>
                     @if($jumlahAktif > 0)
                         <label class="inline-flex items-center gap-1.5 cursor-pointer">
@@ -239,67 +239,88 @@
     const grupArmada = {};   // nopol -> featureGroup
     const layerRute  = {};   // id rute -> featureGroup
 
-    rutes.forEach(function (r) {
-        if (!grupArmada[r.nopol]) {
-            grupArmada[r.nopol] = L.featureGroup().addTo(peta);
-        }
-        const layer = L.featureGroup();
-        const pts = (r.points || []).filter(p => !isNaN(p.lat) && !isNaN(p.lng));
+rutes.forEach(function (r) {
+    if (!grupArmada[r.nopol]) {
+        grupArmada[r.nopol] = L.featureGroup().addTo(peta);
+    }
+    const layer = L.featureGroup();
 
-        const popup =
-            '<strong>' + esc(r.nama) + '</strong><br>' +
-            '<span style="font-size:12px;color:#64748b">' + esc(r.nopol) +
-            (r.jenis ? ' · ' + esc(r.jenis) : '') + '<br>' +
-            esc(r.hari) + ' · ' + r.jarak.toFixed(2) + ' km</span>';
+    // Nomor urut dihitung sebelum titik tanpa koordinat dibuang
+    const pts = (r.points || [])
+        .map((p, i) => ({ ...p, no: i + 1 }))
+        .filter(p => !isNaN(p.lat) && !isNaN(p.lng));
 
-        if (r.geometry && r.geometry.length > 1) {
-            L.polyline(r.geometry, { color: r.color, weight: 5, opacity: 0.85 })
-                .bindPopup(popup).addTo(layer);
-        } else if (pts.length > 1) {
-            L.polyline(pts.map(p => [p.lat, p.lng]), { color: r.color, weight: 4, dashArray: '8 8' })
-                .bindPopup(popup).addTo(layer);
-        }
+    const popup =
+        '<strong>' + esc(r.nama) + '</strong><br>' +
+        '<span style="font-size:12px;color:#64748b">' + esc(r.nopol) +
+        (r.jenis ? ' · ' + esc(r.jenis) : '') + '<br>' +
+        esc(r.hari) + ' · ' + r.jarak.toFixed(2) + ' km</span>';
 
-        pts.forEach(function (p, i) {
-            L.circleMarker([p.lat, p.lng], {
-                radius: 7, color: '#fff', weight: 2, fillColor: r.color, fillOpacity: 1
-            }).bindTooltip((i + 1) + '. ' + esc(p.name) + ' (' + esc(r.hari) + ')').addTo(layer);
-        });
-
-        layer.addTo(grupArmada[r.nopol]);
-        layerRute[r.id] = layer;
-    });
-
-    const semua = L.featureGroup(Object.values(grupArmada));
-    if (semua.getLayers().length && semua.getBounds().isValid()) {
-        peta.fitBounds(semua.getBounds().pad(0.1));
+    if (r.geometry && r.geometry.length > 1) {
+        L.polyline(r.geometry, { color: r.color, weight: 5, opacity: 0.85 })
+            .bindPopup(popup).addTo(layer);
+    } else if (pts.length > 1) {
+        L.polyline(pts.map(p => [p.lat, p.lng]), { color: r.color, weight: 4, dashArray: '8 8' })
+            .bindPopup(popup).addTo(layer);
     }
 
-    // Tampilkan / sembunyikan semua rute satu armada
-    document.querySelectorAll('[data-toggle-armada]').forEach(function (cb) {
-        cb.addEventListener('change', function () {
-            const g = grupArmada[cb.dataset.toggleArmada];
-            if (!g) return;
-            cb.checked ? g.addTo(peta) : peta.removeLayer(g);
-        });
+    // Satu penanda per lokasi; kunjungan berulang digabung nomornya (mis. "2,4")
+    const perLokasi = {};
+    pts.forEach(function (p) {
+        const k = p.id ?? (p.lat + ',' + p.lng);
+        (perLokasi[k] = perLokasi[k] || { p: p, no: [] }).no.push(p.no);
     });
 
-    window.fokusRute = function (id) {
-        const layer = layerRute[id];
-        if (!layer) return;
+    Object.values(perLokasi).forEach(function (g) {
+        const label = g.no.join(',');
+        const icon = L.divIcon({
+            className: '',
+            iconSize: [0, 0],
+            html: '<div style="transform:translate(-50%,-50%);display:flex;align-items:center;justify-content:center;' +
+                  'min-width:24px;height:24px;padding:0 6px;border-radius:12px;border:2px solid #fff;' +
+                  'background:' + r.color + ';color:#fff;font:700 11px/1 sans-serif;white-space:nowrap;' +
+                  'box-shadow:0 1px 4px rgba(0,0,0,.4)">' + label + '</div>'
+        });
 
-        // pastikan armada rute ini sedang ditampilkan
-        const r = rutes.find(x => x.id === id);
-        const g = r ? grupArmada[r.nopol] : null;
-        if (g && !peta.hasLayer(g)) {
-            g.addTo(peta);
-            const cb = document.querySelector('[data-toggle-armada="' + CSS.escape(r.nopol) + '"]');
-            if (cb) cb.checked = true;
+        L.marker([g.p.lat, g.p.lng], { icon: icon })
+            .bindTooltip('Urutan ' + g.no.join(', ') + ': ' + esc(g.p.name) + ' (' + esc(r.hari) + ')')
+            .addTo(layer);
+    });
+
+    layer.addTo(grupArmada[r.nopol]);
+    layerRute[r.id] = layer;
+});
+
+        const semua = L.featureGroup(Object.values(grupArmada));
+        if (semua.getLayers().length && semua.getBounds().isValid()) {
+            peta.fitBounds(semua.getBounds().pad(0.1));
         }
+
+        // Tampilkan / sembunyikan semua rute satu armada
+        document.querySelectorAll('[data-toggle-armada]').forEach(function (cb) {
+            cb.addEventListener('change', function () {
+                const g = grupArmada[cb.dataset.toggleArmada];
+                if (!g) return;
+                cb.checked ? g.addTo(peta) : peta.removeLayer(g);
+            });
+        });
+
+        window.fokusRute = function (id) {
+            const layer = layerRute[id];
+            if (!layer) return;
+
+            // pastikan armada rute ini sedang ditampilkan
+            const r = rutes.find(x => x.id === id);
+            const g = r ? grupArmada[r.nopol] : null;
+            if (g && !peta.hasLayer(g)) {
+                g.addTo(peta);
+                const cb = document.querySelector('[data-toggle-armada="' + CSS.escape(r.nopol) + '"]');
+                if (cb) cb.checked = true;
+            }
 
         document.getElementById('peta-rute').scrollIntoView({ behavior: 'smooth', block: 'center' });
         if (layer.getBounds().isValid()) peta.fitBounds(layer.getBounds().pad(0.2));
-    };
-})();
+            };
+        })();
 </script>
 @endsection
