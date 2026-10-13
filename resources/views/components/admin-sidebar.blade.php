@@ -45,7 +45,7 @@
     <div class="flex flex-col flex-1 overflow-y-auto">
         {{-- Header Sidebar --}}
         <div class="h-20 flex items-center px-6 border-b border-slate-100 gap-3 shrink-0">
-            <div class="w-9 h-9 bg-green-700 rounded-xl flex items-center justify-center text-white font-bold text-lg shadow-md shadow-green-700/20">M</div>
+        <img src="{{ asset('images/logo.png') }}" alt="Logo DLH Majalengka" class="w-9 h-9 rounded-xl object-contain shrink-0">
             <div>
                 <h2 class="font-bold text-sm text-slate-900 tracking-tight leading-none">DLH Majalengka</h2>
                 <span class="text-[10px] text-gray-400 font-medium tracking-wider uppercase">Admin Panel</span>
