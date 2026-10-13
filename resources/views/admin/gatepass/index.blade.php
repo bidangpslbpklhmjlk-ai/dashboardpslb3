@@ -56,7 +56,7 @@
     {{-- Stats --}}
     <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="stat-card anim-stat bg-white rounded-xl p-5 shadow-sm border border-slate-200" style="animation-delay: 0.05s">
-            <p class="text-slate-500 text-sm font-medium">Kendaraan Hari Ini</p>
+            <p class="text-slate-500 text-sm font-medium">Total Ritasi ({{ $stats['label'] }})</p>
             <p class="text-3xl font-bold text-slate-900 mt-1">{{ number_format($stats['total_kendaraan']) }}</p>
         </div>
         <div class="stat-card anim-stat bg-white rounded-xl p-5 shadow-sm border border-slate-200" style="animation-delay: 0.12s">
@@ -74,8 +74,8 @@
          x-data="{ activeChart: 'jumlah' }">
         <div class="flex justify-between items-center mb-4">
             <div>
-                <h3 class="text-sm font-semibold text-slate-700">Tren 7 Hari Terakhir</h3>
-                <p class="text-xs text-slate-400 mt-0.5">Jumlah kendaraan & volume masuk per hari</p>
+                <h3 class="text-sm font-semibold text-slate-700">{{ $trendJudul }}</h3>
+                <p class="text-xs text-slate-400 mt-0.5">{{ $trendKeterangan }}</p>
             </div>
             <div class="flex gap-1 bg-slate-100 p-1 rounded-lg">
                 <button type="button" @click="activeChart = 'jumlah'"
@@ -87,7 +87,15 @@
             </div>
         </div>
         <div class="relative" style="height: 260px;">
-            <canvas id="trendChart"></canvas>
+            @if($chartLabels->isEmpty())
+    <div class="flex items-center justify-center text-sm text-slate-400" style="height: 260px;">
+        Tidak ada data untuk filter ini.
+    </div>
+@else
+    <div class="relative" style="height: 260px;">
+        <canvas id="trendChart"></canvas>
+    </div>
+@endif
         </div>
     </div>
 
@@ -103,8 +111,13 @@
         </div>
         <form action="{{ route('admin.gatepass.index') }}" method="GET" class="flex flex-wrap gap-4 items-end">
             <div>
-                <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase">Tanggal</label>
-                <input type="date" name="tanggal" value="{{ request('tanggal', today()->format('Y-m-d')) }}" 
+                <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase">Dari</label>
+                <input type="date" name="dari" value="{{ request('dari', request('tanggal')) }}"
+                    class="w-40 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm transition-shadow">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase">Sampai</label>
+                <input type="date" name="sampai" value="{{ request('sampai') }}"
                     class="w-40 px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm transition-shadow">
             </div>
             <div>
@@ -633,6 +646,9 @@
                             <p class="text-lg font-bold text-emerald-600" x-text="detailData?.total_volume + ' Ton'"></p>
                         </div>
                     </div>
+                    @if($stats['volume_estimasi'] > 0)
+    <p class="text-xs text-amber-600 mt-1">termasuk estimasi {{ number_format($stats['volume_estimasi'], 2) }} Ton (data rekap)</p>
+@endif
 
                     {{-- Muatan --}}
                     <div class="text-sm">
@@ -729,7 +745,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const dataJumlah = @json($chartJumlah);
     const dataVolume = @json($chartVolume);
 
-    const ctx = document.getElementById('trendChart').getContext('2d');
+    const canvas = document.getElementById('trendChart');
+if (!canvas) return;   // tidak ada data untuk filter ini
+const ctx = canvas.getContext('2d');
 
     const gradientEmerald = ctx.createLinearGradient(0, 0, 0, 260);
     gradientEmerald.addColorStop(0, 'rgba(16, 185, 129, 0.35)');
@@ -749,7 +767,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 borderColor: '#059669',
                 backgroundColor: gradientEmerald,
                 borderWidth: 2.5,
-                pointRadius: 4,
+                pointRadius: labels.length > 31 ? 0 : 4,
                 pointHoverRadius: 6,
                 pointBackgroundColor: '#059669',
                 pointBorderColor: '#ffffff',
@@ -777,7 +795,7 @@ document.addEventListener('DOMContentLoaded', function () {
             },
             scales: {
                 y: { beginAtZero: true, ticks: { precision: 0 }, grid: { color: '#f1f5f9' } },
-                x: { grid: { display: false } }
+                x: { grid: { display: false }, ticks: { autoSkip: true, maxTicksLimit: 16 } }
             }
         }
     };

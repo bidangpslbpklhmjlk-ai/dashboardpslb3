@@ -34,6 +34,12 @@
             'armadaOptions' => $armadaOptions,
             'selectedId'    => old('armada_id'),
         ])
+                {{-- Sumber Sampah (dari rute armada, tanpa Kantor DLH dan TPA) --}}
+        <div id="sumber-wrap">
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Sumber Sampah <span class="text-slate-400 text-xs font-normal">(Opsional)</span></label>
+            <div id="sumber-list" class="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-slate-700"></div>
+            @error('sumber_sampah')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+        </div>
 
         {{-- Jenis Muatan --}}
         <div>
@@ -76,4 +82,34 @@
     </form>
 
 </div>
+<script>
+(function () {
+    const peta    = @json($sumberPerArmada);
+    const dipilih = @json(old('sumber_sampah', []));
+    const box     = document.getElementById('sumber-list');
+    let terakhir  = null;
+
+    function armadaId() {
+        const el = document.querySelector('[name=armada_id]');
+        return el ? el.value : '';
+    }
+    function tampil() {
+        const id = armadaId();
+        if (id === terakhir) return;
+        terakhir = id;
+        const daftar = peta[id] || [];
+        box.innerHTML = !id
+            ? '<span class="text-slate-400">Pilih armada dulu.</span>'
+            : daftar.length
+                ? daftar.map(n =>
+                    '<label class="inline-flex items-center gap-1.5"><input type="checkbox" name="sumber_sampah[]" value="'
+                    + n.replace(/"/g, '&quot;') + '"' + (dipilih.includes(n) ? ' checked' : '') + '> ' + n + '</label>').join('')
+                : '<span class="text-slate-400">Armada ini belum punya rute.</span>';
+    }
+    document.addEventListener('change', tampil);
+    document.addEventListener('input', tampil);
+    setInterval(tampil, 400);   // cadangan bila picker mengisi nilai lewat JavaScript
+    tampil();
+})();
+</script>
 @endsection

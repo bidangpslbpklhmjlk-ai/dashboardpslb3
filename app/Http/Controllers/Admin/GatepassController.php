@@ -17,8 +17,16 @@ class GatepassController extends Controller
     {
         $query = GatepassLog::with(['armada', 'invoice']);
 
-        if ($request->filled('tanggal')) {
-            $query->whereDate('waktu_masuk', $request->tanggal);
+        $dari   = $request->filled('dari')   ? Carbon::parse($request->dari)->startOfDay()   : null;
+        $sampai = $request->filled('sampai') ? Carbon::parse($request->sampai)->endOfDay()   : null;
+        if (! $dari && ! $sampai && $request->filled('tanggal')) {
+            $dari = Carbon::parse($request->tanggal)->startOfDay();
+        }
+        if ($dari && ! $sampai) { $sampai = $dari->copy()->endOfDay(); }
+        if ($sampai && ! $dari) { $dari   = $sampai->copy()->startOfDay(); }
+
+        if ($dari) {
+            $query->whereBetween('waktu_masuk', [$dari, $sampai]);
         }
         if ($request->filled('tipe_kendaraan')) {
             $query->where('tipe_kendaraan', $request->tipe_kendaraan);
@@ -30,6 +38,7 @@ class GatepassController extends Controller
             $query->where('nomor_polisi', 'like', '%' . $request->nomor_polisi . '%');
         }
 
+        $dasarGrafik = clone $query; 
         $allLogs = $query->orderBy('waktu_masuk', 'desc')->get();
 
         $grouped = $allLogs->groupBy(function ($log) {
@@ -59,44 +68,89 @@ class GatepassController extends Controller
             $page,
             ['path' => $request->url(), 'query' => $request->query()]
         );
-
-        $todayQuery = GatepassLog::whereDate('waktu_masuk', today());
-        $stats = [
-            'total_kendaraan' => $todayQuery->count(),
-            'total_volume'    => $todayQuery->sum('volume_ton'),
-            'rata_volume'     => $todayQuery->avg('volume_ton') ?? 0,
-        ];
-
         $tipeKendaraanList = GatepassLog::select('tipe_kendaraan')->distinct()->pluck('tipe_kendaraan');
         $jenisMuatanList   = GatepassLog::select('jenis_muatan')->distinct()->pluck('jenis_muatan');
         $armadaList        = Armada::where('aktif', true)->orderBy('nomor_polisi')->get();
+       $awalStat  = $dari ?? today()->startOfDay();
+$akhirStat = $sampai ?? today()->endOfDay();
+$statQuery = GatepassLog::whereBetween('waktu_masuk', [$awalStat, $akhirStat]);
 
-        $tanggalRange = collect(range(6, 0))->map(fn($i) => today()->subDays($i));
-        $trendData = $tanggalRange->map(function ($tanggal) {
-            $logsHariItu = GatepassLog::whereDate('waktu_masuk', $tanggal);
-            return [
-                'tanggal' => $tanggal->translatedFormat('d M'),
-                'jumlah'  => $logsHariItu->count(),
-                'volume'  => (float) $logsHariItu->sum('volume_ton'),
-            ];
-        });
+$stats = [
+    'total_kendaraan' => (clone $statQuery)->count(),
+    'total_volume'    => (clone $statQuery)->sum('volume_ton'),
+    'rata_volume'     => (clone $statQuery)->avg('volume_ton') ?? 0,
+    'volume_estimasi' => (clone $statQuery)->where('asal_data', 'impor_rekap')->sum('volume_ton'),
+    'label'           => ! $dari ? 'Hari Ini'
+        : ($awalStat->isSameDay($akhirStat)
+            ? $awalStat->translatedFormat('d M Y')
+            : $awalStat->translatedFormat('d M Y') . ' – ' . $akhirStat->translatedFormat('d M Y')),
+];
+
+// Grafik mengikuti filter yang sama dengan tabel.
+// Tanpa filter tanggal: dari data pertama sampai data terakhir yang cocok.
+$rentang = (clone $dasarGrafik)->toBase()
+    ->selectRaw('MIN(waktu_masuk) as awal, MAX(waktu_masuk) as akhir')->first();
+
+$tgAwal  = $dari   ? $dari->copy()->startOfDay()   : ($rentang?->awal  ? Carbon::parse($rentang->awal)->startOfDay()  : null);
+$tgAkhir = $sampai ? $sampai->copy()->startOfDay() : ($rentang?->akhir ? Carbon::parse($rentang->akhir)->startOfDay() : null);
+
+$trendData       = collect();
+$trendJudul      = 'Tren Ritasi';
+$trendKeterangan = 'Tidak ada data pada filter ini';
+
+if ($tgAwal && $tgAkhir && $tgAwal->lte($tgAkhir)) {
+    $perHari = (clone $dasarGrafik)->toBase()
+        ->selectRaw('DATE(waktu_masuk) as tgl, COUNT(*) as jumlah, SUM(volume_ton) as volume')
+        ->whereBetween('waktu_masuk', [$tgAwal->copy()->startOfDay(), $tgAkhir->copy()->endOfDay()])
+        ->groupBy('tgl')->get()->keyBy('tgl');
+
+    // sampai 62 hari: per hari. Lebih panjang: per bulan.
+    $perBulan = $tgAwal->diffInDays($tgAkhir) > 62;
+
+    if (! $perBulan) {
+        for ($d = $tgAwal->copy(); $d->lte($tgAkhir); $d->addDay()) {
+            $r = $perHari->get($d->toDateString());
+            $trendData->push([
+                'tanggal' => $d->translatedFormat('d M'),
+                'jumlah'  => (int) ($r->jumlah ?? 0),
+                'volume'  => (float) ($r->volume ?? 0),
+            ]);
+        }
+    } else {
+        $perBln = $perHari->groupBy(fn ($r) => substr($r->tgl, 0, 7));
+        for ($m = $tgAwal->copy()->startOfMonth(); $m->lte($tgAkhir); $m->addMonth()) {
+            $baris = $perBln->get($m->format('Y-m'), collect());
+            $trendData->push([
+                'tanggal' => $m->translatedFormat('M Y'),
+                'jumlah'  => (int) $baris->sum('jumlah'),
+                'volume'  => round((float) $baris->sum('volume'), 2),
+            ]);
+        }
+    }
+
+    $trendJudul      = $perBulan ? 'Tren per Bulan' : 'Tren per Hari';
+    $trendKeterangan = 'Mengikuti filter · ' . ($tgAwal->isSameDay($tgAkhir)
+        ? $tgAwal->translatedFormat('d M Y')
+        : $tgAwal->translatedFormat('d M Y') . ' – ' . $tgAkhir->translatedFormat('d M Y'));
+}
 
         $chartLabels = $trendData->pluck('tanggal');
         $chartJumlah = $trendData->pluck('jumlah');
         $chartVolume = $trendData->pluck('volume');
 
-        return view('admin.gatepass.index', compact(
-            'logs', 'stats', 'tipeKendaraanList', 'jenisMuatanList', 'armadaList',
-            'chartLabels', 'chartJumlah', 'chartVolume'
-        ));
+return view('admin.gatepass.index', compact(
+    'logs', 'stats', 'tipeKendaraanList', 'jenisMuatanList', 'armadaList',
+    'chartLabels', 'chartJumlah', 'chartVolume', 'trendJudul', 'trendKeterangan'
+));
     }
 
- public function create()
-{
-    return view('admin.gatepass.create', [
-        'armadaOptions' => $this->armadaOptions(),
-    ]);
-}
+    public function create()
+    {
+        return view('admin.gatepass.create', [
+            'armadaOptions'   => $this->armadaOptions(),
+            'sumberPerArmada' => $this->sumberPerArmada(),
+        ]);
+    }
 
 
 public function store(Request $request)
@@ -107,6 +161,8 @@ public function store(Request $request)
         'jenis_muatan'  => 'required|string|max:50',
         'volume_ton'    => 'required|numeric|min:0|max:999.99',
         'photo'         => 'nullable|image|max:2048',
+        'sumber_sampah'   => 'nullable|array',
+        'sumber_sampah.*' => 'string|max:150',
     ], [
         'armada_id.required' => 'Pilih armada dari daftar.',
         'armada_id.exists'   => 'Armada tidak ditemukan.',
@@ -119,6 +175,7 @@ public function store(Request $request)
         'nomor_polisi'   => $armada->nomor_polisi,
         'tipe_kendaraan' => $armada->jenis_kendaraan ?: 'Lainnya',
         'jenis_muatan'   => $validated['jenis_muatan'],
+        'sumber_sampah' => $request->filled('sumber_sampah') ? implode('; ', $request->input('sumber_sampah')) : null,
         'volume_ton'     => $validated['volume_ton'],
         'waktu_masuk'    => Carbon::parse($validated['tanggal_masuk'])
                                 ->setTimeFromTimeString(now()->format('H:i:s')),
@@ -142,12 +199,13 @@ public function store(Request $request)
 }
 
     public function edit(GatepassLog $gatepass)
-{
-    return view('admin.gatepass.edit', [
-        'gatepass'      => $gatepass,
-        'armadaOptions' => $this->armadaOptions($gatepass->armada_id),
-    ]);
-}
+    {
+        return view('admin.gatepass.edit', [
+            'gatepass'        => $gatepass,
+            'armadaOptions'   => $this->armadaOptions($gatepass->armada_id),
+            'sumberPerArmada' => $this->sumberPerArmada(),
+        ]);
+    }
 
     public function update(Request $request, GatepassLog $gatepass)
 {
@@ -157,6 +215,8 @@ public function store(Request $request)
         'jenis_muatan'  => 'required|string|max:50',
         'volume_ton'    => 'required|numeric|min:0|max:999.99',
         'photo'         => 'nullable|image|max:2048',
+        'sumber_sampah'   => 'nullable|array',
+        'sumber_sampah.*' => 'string|max:150',
     ], [
         'armada_id.required' => 'Pilih armada dari daftar.',
         'armada_id.exists'   => 'Armada tidak ditemukan.',
@@ -169,6 +229,7 @@ public function store(Request $request)
         'nomor_polisi'   => $armada->nomor_polisi,
         'tipe_kendaraan' => $armada->jenis_kendaraan ?: 'Lainnya',
         'jenis_muatan'   => $validated['jenis_muatan'],
+        'sumber_sampah' => $request->filled('sumber_sampah') ? implode('; ', $request->input('sumber_sampah')) : null,
         'volume_ton'     => $validated['volume_ton'],
         'waktu_masuk'    => Carbon::parse($validated['tanggal_masuk'])
                                 ->setTimeFromTimeString($gatepass->waktu_masuk->format('H:i:s')),
@@ -249,4 +310,13 @@ private function resolveArmada(int $id, ?int $currentId = null): Armada
         return redirect()->route('admin.gatepass.index')
             ->with('success', 'Data berhasil dihapus');
     }
+    private function sumberPerArmada(): array
+{
+    return \App\Models\RuteAngkut::with('lokasis:id,nama,jenis')->get()
+        ->groupBy('armada_id')
+        ->map(fn ($rutes) => $rutes->flatMap->lokasis
+            ->filter(fn ($l) => ($l->jenis ?? 'pengambilan') === 'pengambilan')
+            ->pluck('nama')->unique()->sort()->values()->all())
+        ->all();
+}
 }

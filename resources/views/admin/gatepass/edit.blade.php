@@ -34,7 +34,12 @@
             'armadaOptions' => $armadaOptions,
             'selectedId'    => old('armada_id', $gatepass->armada_id),
         ])
-
+        {{-- Sumber Sampah (dari rute armada, tanpa Kantor DLH dan TPA) --}}
+        <div id="sumber-wrap">
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Sumber Sampah <span class="text-slate-400 text-xs font-normal">(Opsional)</span></label>
+            <div id="sumber-list" class="flex flex-wrap gap-x-4 gap-y-1.5 text-sm text-slate-700"></div>
+            @error('sumber_sampah')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
+        </div>
         {{-- Jenis Muatan --}}
         <div>
             <label class="block text-sm font-medium text-slate-700 mb-1.5">Jenis Muatan <span class="text-red-500">*</span></label>
@@ -74,4 +79,33 @@
         </div>
     </form>
 </div>
+<script>
+(function () {
+    const peta    = @json($sumberPerArmada);
+    const dipilih = @json(old('sumber_sampah', array_values(array_filter(array_map('trim', explode(';', (string) $gatepass->sumber_sampah))))));
+    const box     = document.getElementById('sumber-list');
+    let terakhir  = null;
+
+    function armadaId() {
+        const el = document.querySelector('[name=armada_id]');
+        return el ? el.value : '';
+    }
+    function tampil() {
+        const id = armadaId();
+        if (id === terakhir) return;
+        terakhir = id;
+        // daftar rute + nilai tersimpan yang tidak ada di rute (misalnya hasil impor rekap), supaya tidak hilang saat disimpan
+        const daftar = [...new Set([...(peta[id] || []), ...dipilih])];
+        box.innerHTML = !daftar.length
+            ? '<span class="text-slate-400">Armada ini belum punya rute.</span>'
+            : daftar.map(n =>
+                '<label class="inline-flex items-center gap-1.5"><input type="checkbox" name="sumber_sampah[]" value="'
+                + n.replace(/"/g, '&quot;') + '"' + (dipilih.includes(n) ? ' checked' : '') + '> ' + n + '</label>').join('');
+    }
+    document.addEventListener('change', tampil);
+    document.addEventListener('input', tampil);
+    setInterval(tampil, 400);   // cadangan bila picker mengisi nilai lewat JavaScript
+    tampil();
+})();
+</script>
 @endsection

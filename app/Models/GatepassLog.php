@@ -18,6 +18,9 @@ protected $fillable = [
     'ritasi',
     'waktu_masuk',
     'photo',
+    'asal_data',
+    'sumber_sampah',
+    'catatan',
 ];
     protected $casts = [
         'waktu_masuk' => 'datetime',
