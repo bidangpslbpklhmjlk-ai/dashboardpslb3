@@ -106,4 +106,12 @@ public function homeRoute(): ?string
 {
     return $this->is_active ? 'admin.dashboard' : null;
 }
+
+/** Menu yang punya layar di aplikasi Android. Tambah 'checkin' nanti kalau layarnya sudah ada. */
+public const MENU_APP = ['gatepass'];
+
+public function menuApp(): array
+{
+    return array_values(array_filter(self::MENU_APP, fn ($k) => $this->canAccessMenu($k)));
+}
 }

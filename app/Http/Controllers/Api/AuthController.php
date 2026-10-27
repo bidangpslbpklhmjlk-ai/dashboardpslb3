@@ -22,14 +22,23 @@ class AuthController extends Controller
         if (! $user || ! Hash::check($data['password'], $user->password)) {
             return response()->json(['message' => 'Email atau kata sandi salah.'], 422);
         }
-        if (! $user->canAccessMenu('gatepass')) {
-            return response()->json(['message' => 'Akun ini tidak punya akses Gatepass.'], 403);
+        if (! $user->is_active) {
+            return response()->json(['message' => 'Akun tidak aktif.'], 403);
+        }
+        if (empty($user->menuApp())) {
+            return response()->json(['message' => 'Akun ini tidak punya akses aplikasi.'], 403);
         }
 
         return response()->json([
             'token' => $user->createToken($data['device_name'] ?? 'android')->plainTextToken,
-            'user'  => ['id' => $user->id, 'name' => $user->name, 'email' => $user->email],
+            'user'  => $this->profil($user),
         ]);
+    }
+
+    /** Profil dan menu terbaru, dipanggil app saat dibuka. */
+    public function me(Request $request)
+    {
+        return response()->json($this->profil($request->user()));
     }
 
     public function logout(Request $request)
@@ -37,5 +46,16 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'OK']);
+    }
+
+    private function profil(User $u): array
+    {
+        return [
+            'id'      => $u->id,
+            'name'    => $u->name,
+            'email'   => $u->email,
+            'jabatan' => $u->peran->nama ?? $u->role,   // sesuaikan nama kolom di tabel peran
+            'menu'    => $u->menuApp(),
+        ];
     }
 }
