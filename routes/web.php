@@ -118,6 +118,9 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::get('/gatepass/{gatepass}/edit', [GatepassController::class, 'edit'])->name('gatepass.edit');
         Route::put('/gatepass/{gatepass}', [GatepassController::class, 'update'])->name('gatepass.update');
         Route::delete('/gatepass/{gatepass}', [GatepassController::class, 'destroy'])->name('gatepass.destroy');
+        Route::get('/gatepass/template', [GatepassController::class, 'template'])->name('gatepass.template');
+        Route::post('/gatepass/import', [GatepassController::class, 'import'])->name('gatepass.import');
+        Route::get('/gatepass/export', [GatepassController::class, 'export'])->name('gatepass.export');
     });
 
 // --- ARMADA ---

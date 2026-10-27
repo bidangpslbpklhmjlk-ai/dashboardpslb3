@@ -7,18 +7,30 @@
         'satuan'   => old('satuan', $kategori->satuan ?? ''),
     ];
     $input = 'w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 outline-none text-sm';
+
+    $kelompokAda = $kelompokList->contains($val['kelompok']);
+    $modeBaru    = $val['kelompok'] !== '' && ! $kelompokAda;
 @endphp
 
 <div>
     <label class="block text-sm font-medium text-slate-700 mb-1.5">Kelompok <span class="text-red-500">*</span></label>
-    <select id="kelompok-pilih" class="{{ $input }} mb-2">
-        <option value="">Pilih kelompok yang sudah ada</option>
+
+    <select id="kelompok-pilih" required class="{{ $input }}">
+        <option value="">Pilih kelompok</option>
         @foreach($kelompokList as $k)
-            <option value="{{ $k }}" @selected($val['kelompok'] === $k)>{{ $k }}</option>
+            <option value="{{ $k }}" @selected($kelompokAda && $val['kelompok'] === $k)>{{ $k }}</option>
         @endforeach
+        <option value="__baru__" @selected($modeBaru)>+ Tambah kelompok baru…</option>
     </select>
-    <input type="text" id="kelompok-input" name="kelompok" value="{{ $val['kelompok'] }}" required maxlength="150"
-        class="{{ $input }}" placeholder="atau ketik nama kelompok baru">
+
+    <input type="text" id="kelompok-baru" maxlength="150"
+        value="{{ $modeBaru ? $val['kelompok'] : '' }}"
+        class="{{ $input }} mt-2 {{ $modeBaru ? '' : 'hidden' }}"
+        placeholder="Ketik nama kelompok baru">
+
+    {{-- nilai yang benar-benar dikirim ke server --}}
+    <input type="hidden" id="kelompok-input" name="kelompok" value="{{ $val['kelompok'] }}">
+
     @error('kelompok')<p class="text-red-500 text-xs mt-1">{{ $message }}</p>@enderror
 </div>
 
@@ -57,18 +69,26 @@
     Tarif berlaku per satuan yang dipilih. Untuk object retribusi <strong>kolektif</strong>
     (RW/Pasar/Terminal), tagihan dihitung otomatis: tarif × jumlah unit.
 </p>
+
 <script>
 (function () {
-    var pilih = document.getElementById('kelompok-pilih');
-    var input = document.getElementById('kelompok-input');
+    var pilih  = document.getElementById('kelompok-pilih');
+    var baru   = document.getElementById('kelompok-baru');
+    var hidden = document.getElementById('kelompok-input');
+
+    function sync() {
+        var isBaru = pilih.value === '__baru__';
+        baru.classList.toggle('hidden', !isBaru);
+        baru.required = isBaru;
+        hidden.value = isBaru ? baru.value.trim() : pilih.value;
+    }
 
     pilih.addEventListener('change', function () {
-        if (pilih.value) input.value = pilih.value;
+        sync();
+        if (pilih.value === '__baru__') baru.focus();
     });
+    baru.addEventListener('input', sync);
 
-    input.addEventListener('input', function () {
-        var cocok = Array.from(pilih.options).some(function (o) { return o.value === input.value; });
-        pilih.value = cocok ? input.value : '';
-    });
+    sync();
 })();
 </script>

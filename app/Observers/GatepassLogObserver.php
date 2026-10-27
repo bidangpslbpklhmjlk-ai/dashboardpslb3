@@ -13,6 +13,9 @@ class GatepassLogObserver
         if (!$gatepassLog->needsInvoice()) {
             return;
         }
+            if (!$gatepassLog->needsInvoice()) {
+        return;
+        }
 
         $tarif = $gatepassLog->armada->tarif;
 
@@ -20,6 +23,14 @@ class GatepassLogObserver
             Log::warning("GatepassLog #{$gatepassLog->id}: armada berbayar tapi belum punya tarif, invoice tidak dibuat.");
             return;
         }
+
+            if ($gatepassLog->asal_data === 'impor_rekap') {
+        return;
+    }
+
+    if (!$gatepassLog->needsInvoice()) {
+        return;
+    }
 
         $volumeTon = $gatepassLog->volume_ton ?? 0;
         $ritasi = $gatepassLog->ritasi ?? 1;

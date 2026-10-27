@@ -21,6 +21,7 @@ protected $fillable = [
     'asal_data',
     'sumber_sampah',
     'catatan',
+    'client_uuid',
 ];
     protected $casts = [
         'waktu_masuk' => 'datetime',
