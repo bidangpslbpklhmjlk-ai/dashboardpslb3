@@ -5,12 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Armada;
 use App\Models\GatepassLog;
+use App\Support\Thumbnail;
 use Carbon\Carbon;
 use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Validation\ValidationException;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\ValidationException;
 
 class GatepassController extends Controller
 {
@@ -119,17 +120,84 @@ class GatepassController extends Controller
 
         if ($request->hasFile('photo')) {
             $data['photo'] = $request->file('photo')->store('gatepass', 'public');
+            Thumbnail::buat($data['photo']);
         }
 
         try {
             $log = GatepassLog::create($data); // Observer membuat invoice jika armada berbayar
         } catch (UniqueConstraintViolationException) {
-            $log = $this->cariLog($uuid);
+            // Dua kiriman bersamaan dengan client_uuid yang sama: ambil yang sudah tersimpan.
+            $log = $this->cariLog($v['client_uuid']);
 
             return $this->balas($log, true, 200);
         }
 
         return $this->balas($log, false, 201);
+    }
+
+    public function update(Request $request, string $uuid)
+    {
+        $log = $this->cariLog($uuid);
+
+        $v = $request->validate([
+            'jenis_muatan' => 'required|string|max:50',
+            'volume_ton'   => 'required|numeric|min:0|max:999.99',
+        ]);
+
+        $log->update($v);
+
+        return $this->balas($log->fresh(), false, 200);
+    }
+
+    public function destroy(string $uuid)
+    {
+        $log = $this->cariLog($uuid);
+
+        if ($log->invoice) {
+            $log->invoice->delete();
+        }
+        if ($log->photo) {
+            Storage::disk('public')->delete($log->photo);
+            Thumbnail::hapus($log->photo);
+        }
+        $log->delete();
+
+        return response()->json(['message' => 'OK']);
+    }
+
+    /** Riwayat bertahap: data dengan id > setelah_id, maksimal 500 baris per panggilan. */
+    public function riwayat(Request $request)
+    {
+        $setelah = max((int) $request->input('setelah_id', 0), 0);
+        $batas   = 500;
+
+        // ritasi ke-N per nopol per tanggal dihitung di database,
+        // jadi tetap benar walau hanya sebagian data yang diambil
+        $sub = GatepassLog::query()->selectRaw(
+            'id, client_uuid, armada_id, nomor_polisi, jenis_muatan, volume_ton, waktu_masuk, photo,
+             ROW_NUMBER() OVER (PARTITION BY nomor_polisi, DATE(waktu_masuk) ORDER BY waktu_masuk, id) AS ritasi_ke'
+        );
+
+        $rows = DB::query()->fromSub($sub, 't')
+            ->where('id', '>', $setelah)
+            ->orderBy('id')
+            ->limit($batas)
+            ->get()
+            ->map(fn ($r) => [
+                'id'           => (int) $r->id,
+                'client_uuid'  => $r->client_uuid,
+                'armada_id'    => $r->armada_id,
+                'nomor_polisi' => $r->nomor_polisi,
+                'jenis_muatan' => $r->jenis_muatan,
+                'volume_ton'   => $r->volume_ton !== null ? (float) $r->volume_ton : null,
+                'waktu_masuk'  => Carbon::parse($r->waktu_masuk, config('app.timezone'))->toIso8601String(),
+                'ritasi_ke'    => (int) $r->ritasi_ke,
+            ] + $this->urlFoto($r->photo));
+
+        return response()->json([
+            'data'     => $rows->values(),
+            'ada_lagi' => $rows->count() === $batas,
+        ]);
     }
 
     private function balas(GatepassLog $log, bool $duplikat, int $status)
@@ -156,76 +224,30 @@ class GatepassController extends Controller
             'waktu_masuk'    => $l->waktu_masuk->toIso8601String(),
             'ritasi_ke'      => $ritasiKe,
             'invoice_dibuat' => $l->hasInvoice(),
-            'photo_url'      => $l->photo ? asset('storage/' . $l->photo) : null,
+        ] + $this->urlFoto($l->photo);
+    }
+
+    /** thumb_url jatuh ke foto asli kalau thumbnail belum ada. */
+    private function urlFoto(?string $photo): array
+    {
+        if (! $photo) {
+            return ['photo_url' => null, 'thumb_url' => null];
+        }
+
+        $thumb = Thumbnail::path($photo);
+        $ada   = Storage::disk('public')->exists($thumb);
+
+        return [
+            'photo_url' => asset('storage/' . $photo),
+            'thumb_url' => asset('storage/' . ($ada ? $thumb : $photo)),
         ];
     }
-    public function update(Request $request, string $uuid)
-{
-    $log = GatepassLog::where('client_uuid', $uuid)->firstOrFail();
 
-    $v = $request->validate([
-        'jenis_muatan' => 'required|string|max:50',
-        'volume_ton'   => 'required|numeric|min:0|max:999.99',
-    ]);
-
-    $log->update($v);
-
-    return $this->balas($log->fresh(), false, 200);
-}
-
-public function destroy(string $uuid)
-{
-    // Hanya data yang dibuat lewat aplikasi (punya client_uuid).
-    $log = $this->cariLog($uuid);
-
-    if ($log->invoice) {
-        $log->invoice->delete();
+    /** Kunci "srv-<id>" untuk data dari web/impor, selain itu client_uuid. */
+    private function cariLog(string $uuid): GatepassLog
+    {
+        return str_starts_with($uuid, 'srv-')
+            ? GatepassLog::findOrFail((int) substr($uuid, 4))
+            : GatepassLog::where('client_uuid', $uuid)->firstOrFail();
     }
-    if ($log->photo) {
-        Storage::disk('public')->delete($log->photo);
-    }
-    $log->delete();
-
-    return response()->json(['message' => 'OK']);
-}
-/** Riwayat N hari terakhir (semua sumber: web, impor, aplikasi), dipecah per halaman. */
-/** Riwayat bertahap: data dengan id > setelah_id, maksimal 500 baris per panggilan. */
-public function riwayat(Request $request)
-{
-    $setelah = max((int) $request->input('setelah_id', 0), 0);
-    $batas   = 500;
-
-    // ritasi ke-N per nopol per tanggal dihitung di database, jadi tetap benar walau hanya sebagian data yang diambil
-    $sub = GatepassLog::query()->selectRaw(
-        'id, client_uuid, armada_id, nomor_polisi, jenis_muatan, volume_ton, waktu_masuk,
-         ROW_NUMBER() OVER (PARTITION BY nomor_polisi, DATE(waktu_masuk) ORDER BY waktu_masuk, id) AS ritasi_ke'
-    );
-
-    $rows = DB::query()->fromSub($sub, 't')
-        ->where('id', '>', $setelah)
-        ->orderBy('id')
-        ->limit($batas)
-        ->get()
-        ->map(fn ($r) => [
-            'id'           => (int) $r->id,
-            'client_uuid'  => $r->client_uuid,
-            'armada_id'    => $r->armada_id,
-            'nomor_polisi' => $r->nomor_polisi,
-            'jenis_muatan' => $r->jenis_muatan,
-            'volume_ton'   => $r->volume_ton !== null ? (float) $r->volume_ton : null,
-            'waktu_masuk'  => Carbon::parse($r->waktu_masuk, config('app.timezone'))->toIso8601String(),
-            'ritasi_ke'    => (int) $r->ritasi_ke,
-        ]);
-
-    return response()->json([
-        'data'    => $rows->values(),
-        'ada_lagi' => $rows->count() === $batas,
-    ]);
-}
-private function cariLog(string $uuid): GatepassLog
-{
-    return str_starts_with($uuid, 'srv-')
-        ? GatepassLog::findOrFail((int) substr($uuid, 4))
-        : GatepassLog::where('client_uuid', $uuid)->firstOrFail();
-}
 }

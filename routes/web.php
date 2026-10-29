@@ -32,6 +32,7 @@ use App\Http\Controllers\Admin\UserController;
 use App\Http\Controllers\Admin\PeranController;
 use App\Http\Controllers\Admin\NeracaSampahController;
 use App\Http\Controllers\Admin\DashboardController;
+use App\Http\Controllers\Admin\LoginLogController;
 
 // ==========================================
 // TES
@@ -74,12 +75,17 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 
     // --- MANAJEMEN PENGGUNA (hanya superadmin) ---
     Route::middleware('menu:pengguna')->group(function () {
+        Route::post('pengguna/{pengguna}/reset-perangkat', [UserController::class, 'resetPerangkat'])
+            ->name('pengguna.reset-perangkat');
+        Route::get('riwayat-login', [LoginLogController::class, 'index'])
+            ->name('riwayat-login.index');
+
         Route::resource('pengguna', UserController::class)
             ->except(['show'])
             ->parameters(['pengguna' => 'pengguna']);
         Route::resource('peran', PeranController::class)
-        ->except(['show'])
-        ->parameters(['peran' => 'peran']);
+            ->except(['show'])
+            ->parameters(['peran' => 'peran']);
     });
 
     // --- MANAJEMEN HALAMAN STATIS ---

@@ -46,6 +46,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'is_active' => 'boolean',
             'menus' => 'array',
+            'device_bound_at' => 'datetime',
+            'last_login_at'   => 'datetime',
+            'last_active_at'  => 'datetime',
         ];
     }
 
@@ -53,6 +56,19 @@ class User extends Authenticatable
     {
         return $this->hasOne(Pegawai::class);
     }
+
+    public function loginLogs()
+{
+    return $this->hasMany(LoginLog::class);
+}
+
+/** Teks untuk web admin, misalnya "5 menit yang lalu" atau "Belum pernah". */
+public function terakhirAktifLabel(): string
+{
+    return $this->last_active_at
+        ? $this->last_active_at->locale('id')->diffForHumans()
+        : 'Belum pernah';
+}
 
     public function peran()
     {
