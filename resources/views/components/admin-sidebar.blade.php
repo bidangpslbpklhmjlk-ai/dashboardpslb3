@@ -26,6 +26,7 @@
         'neraca-sampah' => 'M3 6l3 1m0 0l-3 9a5.002 5.002 0 006.001 0M6 7l3 9M6 7l6-2m6 2l3-1m-3 1l-3 9a5.002 5.002 0 006.001 0M18 7l3 9m-3-9l-6-2m0-2v2m0 16V5m0 16H9m3 0h3',
         'industri' => 'M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4',
         'peran' => 'M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z',
+        'riwayat-login' => 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z',
         ];
 
     // Hanya menu yang boleh diakses pengguna ini, dikelompokkan sesuai config/menus.php
@@ -128,12 +129,12 @@
                 @endforeach
             @endforeach
 
-            {{-- Pengaturan: hanya superadmin --}}
 {{-- Pengaturan: hanya superadmin --}}
 @if($user->isSuperadmin())
     @php
         $aktifPengguna = request()->routeIs('admin.pengguna.*');
-        $aktifPeran = request()->routeIs('admin.peran.*');
+        $aktifRiwayat  = request()->routeIs('admin.riwayat-login.*');
+        $aktifPeran    = request()->routeIs('admin.peran.*');
     @endphp
     <span class="px-3 text-[10px] font-bold text-slate-400 uppercase tracking-widest block mb-2 mt-4">Pengaturan</span>
 
@@ -143,6 +144,14 @@
             <path stroke-linecap="round" stroke-linejoin="round" d="{{ $icons['pengguna'] }}"/>
         </svg>
         <span>Manajemen Pengguna</span>
+    </a>
+
+    <a href="{{ route('admin.riwayat-login.index') }}"
+       class="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all group {{ $aktifRiwayat ? 'bg-green-50 text-green-700 font-semibold' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900' }}">
+        <svg class="w-5 h-5 {{ $aktifRiwayat ? 'text-green-700' : 'text-gray-400 group-hover:text-green-700' }} transition-colors" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="{{ $icons['riwayat-login'] }}"/>
+        </svg>
+        <span>Riwayat Login</span>
     </a>
 
     <a href="{{ route('admin.peran.index') }}"

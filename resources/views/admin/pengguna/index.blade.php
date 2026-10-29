@@ -6,7 +6,7 @@
     <div class="flex justify-between items-center">
         <div>
             <h1 class="text-2xl font-bold text-slate-900">Manajemen Pengguna</h1>
-            <p class="text-slate-500 mt-1">Atur akun admin dan menu yang boleh diakses</p>
+            <p class="text-slate-500 mt-1">Atur akun admin, menu, dan perangkat aplikasi</p>
         </div>
         <a href="{{ route('admin.pengguna.create') }}"
            class="inline-flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm">
@@ -42,8 +42,10 @@
                     <th class="px-5 py-3.5">Pengguna</th>
                     <th class="px-5 py-3.5">Peran</th>
                     <th class="px-5 py-3.5">Akses Menu</th>
+                    <th class="px-5 py-3.5">Perangkat Aplikasi</th>
+                    <th class="px-5 py-3.5">Terakhir Aktif</th>
                     <th class="px-5 py-3.5 text-center">Status</th>
-                    <th class="px-5 py-3.5 text-center w-28">Aksi</th>
+                    <th class="px-5 py-3.5 text-center w-36">Aksi</th>
                 </tr>
             </thead>
             <tbody class="divide-y divide-slate-100">
@@ -72,6 +74,28 @@
                             {{ count($u->menus ?? []) }} dari {{ $totalMenu }} menu
                         @endif
                     </td>
+                    <td class="px-5 py-4">
+                        @if($u->device_id)
+                            <div class="text-slate-800">{{ $u->device_name ?: 'Perangkat tanpa nama' }}</div>
+                            <div class="text-xs text-slate-400">
+                                Terikat {{ $u->device_bound_at?->timezone('Asia/Jakarta')->format('d M Y H:i') }}
+                            </div>
+                        @else
+                            <span class="text-slate-400">Belum terikat</span>
+                        @endif
+                    </td>
+                    <td class="px-5 py-4">
+                        @if($u->last_active_at)
+                            @php $baruSaja = $u->last_active_at->gt(now()->subMinutes(5)); @endphp
+                            <span class="inline-flex items-center gap-1.5 text-slate-700"
+                                  title="{{ $u->last_active_at->timezone('Asia/Jakarta')->format('d M Y H:i:s') }}">
+                                <span class="w-2 h-2 rounded-full {{ $baruSaja ? 'bg-emerald-500' : 'bg-slate-300' }}"></span>
+                                {{ $u->terakhirAktifLabel() }}
+                            </span>
+                        @else
+                            <span class="text-slate-400">Belum pernah</span>
+                        @endif
+                    </td>
                     <td class="px-5 py-4 text-center">
                         @if($u->is_active)
                             <span class="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800">Aktif</span>
@@ -81,6 +105,18 @@
                     </td>
                     <td class="px-5 py-4">
                         <div class="flex items-center justify-center gap-1">
+                            <a href="{{ route('admin.riwayat-login.index', ['user' => $u->id]) }}" class="p-1.5 text-slate-600 hover:bg-slate-100 rounded-lg" title="Riwayat login">
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </a>
+                            @if($u->device_id)
+                            <form action="{{ route('admin.pengguna.reset-perangkat', $u) }}" method="POST"
+                                  onsubmit="return confirm('Reset perangkat {{ $u->name }}? Pengguna akan keluar dari aplikasi dan harus login ulang.')">
+                                @csrf
+                                <button type="submit" class="p-1.5 text-amber-600 hover:bg-amber-50 rounded-lg" title="Reset perangkat">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+                                </button>
+                            </form>
+                            @endif
                             <a href="{{ route('admin.pengguna.edit', $u) }}" class="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg" title="Edit">
                                 <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
                             </a>
@@ -96,7 +132,7 @@
                     </td>
                 </tr>
                 @empty
-                <tr><td colspan="5" class="px-5 py-12 text-center text-slate-500">Belum ada pengguna.</td></tr>
+                <tr><td colspan="7" class="px-5 py-12 text-center text-slate-500">Belum ada pengguna.</td></tr>
                 @endforelse
             </tbody>
         </table>
