@@ -10,6 +10,12 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Carbon\Carbon;
 use Illuminate\Validation\ValidationException;
+use Barryvdh\DomPDF\Facade\Pdf;
+use PhpOffice\PhpSpreadsheet\Spreadsheet;
+use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use PhpOffice\PhpSpreadsheet\Style\Alignment;
+use PhpOffice\PhpSpreadsheet\Style\Border;
+use PhpOffice\PhpSpreadsheet\Style\Fill;
 
 class GatepassController extends Controller
 {
@@ -609,6 +615,166 @@ if (preg_match('/^sep=(.)/i', $baris1, $m)) {
         }
 
         return checkdate($b, $t, $y) ? Carbon::create($y, $b, $t, 0, 0, 0) : null;
+    }
+
+        // ------------------------------------------------------------------
+    // EXPORT EXCEL & PDF (mengikuti filter index, satu baris = satu ritasi)
+    // ------------------------------------------------------------------
+
+    /** Data bersama untuk Excel dan PDF. */
+    private function dataExport(Request $request): array
+    {
+        [$query, $dari, $sampai] = $this->filteredQuery($request);
+
+        $logs = $query->orderBy('waktu_masuk')->orderBy('id')->get();
+
+        $filter = [
+            'Periode' => ! $dari ? 'Semua periode'
+                : ($dari->isSameDay($sampai)
+                    ? $dari->translatedFormat('d M Y')
+                    : $dari->translatedFormat('d M Y') . ' – ' . $sampai->translatedFormat('d M Y')),
+        ];
+        if ($request->filled('tipe_kendaraan')) {
+            $filter['Tipe Kendaraan'] = $request->tipe_kendaraan;
+        }
+        if ($request->filled('perusahaan_id')) {
+            $filter['Perusahaan / Dinas'] = Armada::find($request->perusahaan_id)?->nama ?? '-';
+        }
+        if ($request->filled('nomor_polisi')) {
+            $filter['Nomor Polisi'] = strtoupper($request->nomor_polisi);
+        }
+
+        $total = [
+            'ritasi'   => $logs->count(),
+            'kendaraan'=> $logs->pluck('nomor_polisi')->unique()->count(),
+            'volume'   => (float) $logs->sum('volume_ton'),
+            'estimasi' => (float) $logs->where('asal_data', 'impor_rekap')->sum('volume_ton'),
+        ];
+
+        return [$logs, $filter, $total];
+    }
+
+    private function statusBayar(GatepassLog $log): string
+    {
+        if ($log->invoice) {
+            return $log->invoice->isPaid() ? 'Lunas' : 'Belum Lunas';
+        }
+        // invoice sudah di-eager-load, jadi jangan panggil needsInvoice() (query per baris)
+        return ($log->armada && ! $log->armada->isGratis()) ? 'Perlu Invoice' : 'Gratis';
+    }
+
+    private function barisExport($logs): array
+    {
+        return $logs->values()->map(fn (GatepassLog $l, $i) => [
+            $i + 1,
+            $l->waktu_masuk->format('d/m/Y'),
+            $l->waktu_masuk->format('H:i'),
+            $l->nomor_polisi,
+            $l->tipe_kendaraan,
+            $l->jenis_muatan,
+            $l->armada?->nama ?? '-',
+            str_replace('; ', ', ', (string) $l->sumber_sampah) ?: '-',
+            (float) $l->volume_ton,
+            $this->statusBayar($l),
+        ])->all();
+    }
+
+    public function exportExcel(Request $request)
+    {
+        [$logs, $filter, $total] = $this->dataExport($request);
+        $rows = $this->barisExport($logs);
+
+        $ss = new Spreadsheet();
+        $sh = $ss->getActiveSheet();
+        $sh->setTitle('Gatepass');
+
+        $sh->setCellValue('A1', 'Laporan Pencatatan Kendaraan Sampah (Gatepass TPA)');
+        $sh->mergeCells('A1:J1');
+        $sh->getStyle('A1')->getFont()->setBold(true)->setSize(14);
+
+        $r = 2;
+        foreach ($filter as $k => $v) {
+            $sh->setCellValue("A{$r}", $k);
+            $sh->setCellValue("C{$r}", $v);
+            $sh->mergeCells("A{$r}:B{$r}");
+            $sh->mergeCells("C{$r}:J{$r}");
+            $sh->getStyle("A{$r}")->getFont()->setBold(true);
+            $r++;
+        }
+        $sh->setCellValue("A{$r}", 'Dicetak');
+        $sh->setCellValue("C{$r}", now()->translatedFormat('d M Y H:i'));
+        $sh->mergeCells("A{$r}:B{$r}");
+        $sh->mergeCells("C{$r}:J{$r}");
+        $sh->getStyle("A{$r}")->getFont()->setBold(true);
+        $r += 2;
+
+        $hr = $r; // baris header
+        $sh->fromArray(
+            ['No', 'Tanggal', 'Jam', 'Nomor Polisi', 'Tipe', 'Jenis Muatan',
+             'Perusahaan / Dinas', 'Sumber Sampah', 'Volume (Ton)', 'Status Bayar'],
+            null, "A{$hr}"
+        );
+        $sh->getStyle("A{$hr}:J{$hr}")->applyFromArray([
+            'font'      => ['bold' => true, 'color' => ['rgb' => 'FFFFFF']],
+            'fill'      => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['rgb' => '059669']],
+            'alignment' => ['horizontal' => Alignment::HORIZONTAL_CENTER, 'vertical' => Alignment::VERTICAL_CENTER],
+        ]);
+
+        $awal = $hr + 1;
+        if ($rows) {
+            $sh->fromArray($rows, null, "A{$awal}");
+        }
+        $akhir = $hr + count($rows);
+
+        // baris total
+        $tr = $akhir + 1;
+        $sh->setCellValue("A{$tr}", 'TOTAL (' . $total['ritasi'] . ' ritasi, ' . $total['kendaraan'] . ' kendaraan)');
+        $sh->mergeCells("A{$tr}:H{$tr}");
+        $sh->setCellValue("I{$tr}", $rows ? "=SUM(I{$awal}:I{$akhir})" : 0);
+        $sh->getStyle("A{$tr}:J{$tr}")->getFont()->setBold(true);
+        $sh->getStyle("A{$tr}:J{$tr}")->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setRgb('ECFDF5');
+
+        if ($total['estimasi'] > 0) {
+            $sh->setCellValue('A' . ($tr + 1), 'Catatan: termasuk estimasi ' . number_format($total['estimasi'], 2) . ' Ton dari data rekap.');
+            $sh->getStyle('A' . ($tr + 1))->getFont()->setItalic(true)->getColor()->setRgb('B45309');
+        }
+
+        // format
+        $sh->getStyle("I{$awal}:I{$tr}")->getNumberFormat()->setFormatCode('#,##0.00');
+        $sh->getStyle("A{$awal}:A{$akhir}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sh->getStyle("B{$awal}:C{$akhir}")->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $sh->getStyle("A{$hr}:J{$tr}")->getBorders()->getAllBorders()->setBorderStyle(Border::BORDER_THIN);
+
+        foreach (range('A', 'J') as $col) {
+            $sh->getColumnDimension($col)->setAutoSize(true);
+        }
+        $sh->getColumnDimension('H')->setAutoSize(false)->setWidth(40);
+        $sh->getStyle("H{$awal}:H{$akhir}")->getAlignment()->setWrapText(true);
+        $sh->freezePane('A' . $awal);
+
+        $nama = 'gatepass-' . now()->format('Ymd-His') . '.xlsx';
+
+        return response()->streamDownload(function () use ($ss) {
+            (new Xlsx($ss))->save('php://output');
+        }, $nama, [
+            'Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        ]);
+    }
+
+    public function exportPdf(Request $request)
+    {
+        @set_time_limit(180);
+        @ini_set('memory_limit', '512M');
+
+        [$logs, $filter, $total] = $this->dataExport($request);
+
+        return Pdf::loadView('admin.gatepass.export-pdf', [
+                'rows'   => $this->barisExport($logs),
+                'filter' => $filter,
+                'total'  => $total,
+            ])
+            ->setPaper('a4', 'landscape')
+            ->download('gatepass-' . now()->format('Ymd-His') . '.pdf');
     }
 
     /** @return array{0:int,1:int}|null [jam, menit] */

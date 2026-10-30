@@ -131,6 +131,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::get('/gatepass/template', [GatepassController::class, 'template'])->name('gatepass.template');
         Route::post('/gatepass/import', [GatepassController::class, 'import'])->name('gatepass.import');
         Route::get('/gatepass/export', [GatepassController::class, 'export'])->name('gatepass.export');
+        Route::get('/gatepass/export/excel', [GatepassController::class, 'exportExcel'])->name('gatepass.export.excel');
+        Route::get('/gatepass/export/pdf', [GatepassController::class, 'exportPdf'])->name('gatepass.export.pdf');
     });
 
 // --- ARMADA ---

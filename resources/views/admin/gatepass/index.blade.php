@@ -87,15 +87,25 @@
 
             <div class="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center lg:justify-end">
                 {{-- Aksi file --}}
-                <div class="grid grid-cols-3 gap-2 sm:flex sm:items-center">
-                    <a href="{{ route('admin.gatepass.template') }}"
-                       class="btn-press inline-flex items-center justify-center border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap">
+                @php
+                    $paramFilter = request()->only(['tahun', 'tanggal', 'dari', 'sampai', 'tipe_kendaraan', 'perusahaan_id', 'nomor_polisi']);
+                    $btnFile = 'btn-press inline-flex items-center justify-center border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap';
+                @endphp
+                <div class="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap sm:items-center">
+                    <a href="{{ route('admin.gatepass.template') }}" class="{{ $btnFile }}">
                         Template
                     </a>
-                    <a href="{{ route('admin.gatepass.export', request()->only(['tahun', 'dari', 'sampai', 'tipe_kendaraan', 'perusahaan_id', 'nomor_polisi'])) }}"
-                       class="btn-press inline-flex items-center justify-center border border-slate-300 text-slate-700 hover:bg-slate-50 px-3 sm:px-4 py-2.5 rounded-lg font-medium text-sm whitespace-nowrap"
-                       title="Ekspor data sesuai filter yang sedang aktif">
+                    <a href="{{ route('admin.gatepass.export', $paramFilter) }}" class="{{ $btnFile }}"
+                       title="Ekspor CSV sesuai filter yang sedang aktif">
                         Ekspor CSV
+                    </a>
+                    <a href="{{ route('admin.gatepass.export.excel', $paramFilter) }}" class="{{ $btnFile }}"
+                       title="Ekspor Excel sesuai filter yang sedang aktif">
+                        Excel
+                    </a>
+                    <a href="{{ route('admin.gatepass.export.pdf', $paramFilter) }}" class="{{ $btnFile }}"
+                       title="Ekspor PDF sesuai filter yang sedang aktif">
+                        PDF
                     </a>
                     <form action="{{ route('admin.gatepass.import') }}" method="POST" enctype="multipart/form-data" x-ref="formImport" class="contents">
                         @csrf
