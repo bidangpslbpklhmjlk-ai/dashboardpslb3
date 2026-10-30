@@ -21,10 +21,9 @@
         <div class="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-100/50 p-8 space-y-6">
             
             {{-- Header Logo --}}
-            <div class="text-center space-y-2">
-                <div class="mx-auto w-12 h-12 bg-green-700 rounded-2xl flex items-center justify-center text-white font-black text-xl shadow-lg shadow-green-700/20">
-                    M
-                </div>
+            <div class="text-center space-y-3">
+                <img src="{{ asset('images/logo.png') }}" alt="Logo DLH Majalengka"
+                     class="h-14 w-auto max-w-full object-contain mx-auto">
                 <div>
                     <h2 class="font-bold text-xl text-slate-900 tracking-tight">Selamat Datang</h2>
                     <p class="text-xs text-slate-400 font-medium">Masuk ke Ruang Kerja Admin DLH Majalengka</p>
