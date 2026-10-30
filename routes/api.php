@@ -5,9 +5,11 @@ use App\Http\Controllers\Api\GatepassController;
 use App\Http\Middleware\EnsureDeviceBound;
 use App\Http\Middleware\EnsureGatepassAccess;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\VersiAplikasiController;
 
 
 Route::prefix('v1')->group(function () {
+    Route::get('versi-aplikasi', [VersiAplikasiController::class, 'terbaru']);
     Route::post('login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 
     Route::middleware(['auth:sanctum', EnsureDeviceBound::class])

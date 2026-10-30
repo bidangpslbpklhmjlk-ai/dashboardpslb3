@@ -33,6 +33,7 @@ use App\Http\Controllers\Admin\PeranController;
 use App\Http\Controllers\Admin\NeracaSampahController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LoginLogController;
+use App\Http\Controllers\Admin\VersiAplikasiController;
 
 // ==========================================
 // TES
@@ -86,6 +87,9 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
         Route::resource('peran', PeranController::class)
             ->except(['show'])
             ->parameters(['peran' => 'peran']);
+        Route::resource('versi-aplikasi', VersiAplikasiController::class)
+            ->except(['show'])
+            ->parameters(['versi-aplikasi' => 'versiAplikasi']);
     });
 
     // --- MANAJEMEN HALAMAN STATIS ---
