@@ -47,8 +47,8 @@
         {{-- Header Sidebar --}}
         <div class="h-20 flex items-center px-5 border-b border-slate-100 shrink-0">
             <a href="{{ route('admin.dashboard') }}" class="flex items-center min-w-0">
-                <img src="{{ asset('images/logo.png') }}" alt="Logo DLH Majalengka"
-                     class="h-10 w-auto max-w-full object-contain">
+<img src="{{ asset('images/logo.png') }}?v={{ filemtime(public_path('images/logo.png')) }}" alt="Logo DLH Majalengka"
+     class="h-10 w-auto max-w-full object-contain">
             </a>
         </div>
 

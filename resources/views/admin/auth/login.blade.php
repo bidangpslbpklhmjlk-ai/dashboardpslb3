@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Login Admin - DLH Majalengka</title>
+        <link rel="icon" type="image/png" href="{{ asset('images/favicon.png') }}?v={{ filemtime(public_path('images/favicon.png')) }}">
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-slate-50 font-sans antialiased flex min-h-screen items-center justify-center p-4">
@@ -22,8 +23,8 @@
             
             {{-- Header Logo --}}
             <div class="text-center space-y-3">
-                <img src="{{ asset('images/logo.png') }}" alt="Logo DLH Majalengka"
-                     class="h-14 w-auto max-w-full object-contain mx-auto">
+<img src="{{ asset('images/logo.png') }}?v={{ filemtime(public_path('images/logo.png')) }}" alt="Logo DLH Majalengka"
+     class="h-14 w-auto max-w-full object-contain mx-auto">
                 <div>
                     <h2 class="font-bold text-xl text-slate-900 tracking-tight">Selamat Datang</h2>
                     <p class="text-xs text-slate-400 font-medium">Masuk ke Ruang Kerja Admin DLH Majalengka</p>
