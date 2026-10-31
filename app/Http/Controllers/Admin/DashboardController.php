@@ -11,22 +11,28 @@ use App\Models\Kunjungan;
 use App\Models\NeracaSampahHarian;
 use App\Models\NeracaSampahLaporan;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Http\Request;
 
 class DashboardController extends Controller
 {
-    public function index()
-    {
-        $u = auth()->user();
+public function index(Request $request)
+{
+    $u = auth()->user();
 
-        return view('admin.dashboard', [
-            'armada'   => $u->canAccessMenu('armada', 'kerusakan') ? $this->aman(fn () => $this->armada()) : null,
-            'rute'     => $u->canAccessMenu('rute-angkut', 'lokasi', 'penugasan') ? $this->aman(fn () => $this->rute()) : null,
-            'tpa'      => $u->canAccessMenu('gatepass', 'invoice') ? $this->aman(fn () => $this->tpa()) : null,
-            'pungutan' => $u->canAccessMenu('pungutan', 'invoice') ? $this->aman(fn () => $this->pungutan()) : null,
-            'industri' => $u->canAccessMenu('industri', 'neraca-sampah') ? $this->aman(fn () => $this->industri()) : null,
-            'neraca'   => $u->canAccessMenu('neraca-sampah') ? $this->aman(fn () => $this->neraca()) : null,
-        ]);
+    $tahun = (int) $request->input('tahun', now()->year);
+    if ($tahun < 2000 || $tahun > now()->year) {
+        $tahun = now()->year;
     }
+
+    return view('admin.dashboard', [
+        'armada'   => $u->canAccessMenu('armada', 'kerusakan') ? $this->aman(fn () => $this->armada()) : null,
+        'rute'     => $u->canAccessMenu('rute-angkut', 'lokasi', 'penugasan') ? $this->aman(fn () => $this->rute()) : null,
+        'tpa'      => $u->canAccessMenu('gatepass', 'invoice') ? $this->aman(fn () => $this->tpa($tahun)) : null,
+        'pungutan' => $u->canAccessMenu('pungutan', 'invoice') ? $this->aman(fn () => $this->pungutan()) : null,
+        'industri' => $u->canAccessMenu('industri', 'neraca-sampah') ? $this->aman(fn () => $this->industri()) : null,
+        'neraca'   => $u->canAccessMenu('neraca-sampah') ? $this->aman(fn () => $this->neraca()) : null,
+    ]);
+}
 
     /** Satu bagian yang error tidak merusak seluruh dashboard. */
     private function aman(\Closure $fn): ?array
@@ -86,40 +92,78 @@ class DashboardController extends Controller
         ];
     }
 
-    private function tpa(): array
-    {
-        $bulan = $this->enamBulan();
-        $awal  = now()->startOfMonth()->subMonths(5);
+private function tpa(int $tahun): array
+{
+    $bulan = $this->enamBulan();
+    $awal  = now()->startOfMonth()->subMonths(5);
 
-        // ASUMSI: gatepass_logs punya created_at (volume_ton sudah dipastikan dari migration)
-        $log = DB::table('gatepass_logs')
-            ->where('created_at', '>=', $awal)
-            ->selectRaw('substr(created_at, 1, 7) as ym, count(*) as trip, sum(volume_ton) as ton')
-            ->groupBy('ym')->get()->keyBy('ym');
+    // Grafik 6 bulan terakhir (berdasarkan waktu truk masuk)
+    $log = DB::table('gatepass_logs')
+        ->where('waktu_masuk', '>=', $awal)
+        ->selectRaw('substr(waktu_masuk, 1, 7) as ym, count(*) as trip, sum(volume_ton) as ton')
+        ->groupBy('ym')->get()->keyBy('ym');
 
-        $uang = Invoice::where('created_at', '>=', $awal)->where('status', 'paid')
-            ->selectRaw('substr(created_at, 1, 7) as ym, sum(total) as total')
-            ->groupBy('ym')->pluck('total', 'ym');
+    // Retribusi tetap memakai tanggal invoice
+    $uang = Invoice::where('created_at', '>=', $awal)->where('status', 'paid')
+        ->selectRaw('substr(created_at, 1, 7) as ym, sum(total) as total')
+        ->groupBy('ym')->pluck('total', 'ym');
 
-        $trip = $ton = $retribusi = [];
-        foreach ($bulan as $ym => $label) {
-            $trip[]      = (int) ($log[$ym]->trip ?? 0);
-            $ton[]       = round((float) ($log[$ym]->ton ?? 0), 2);
-            $retribusi[] = (float) ($uang[$ym] ?? 0);
-        }
-
-        return [
-            'labels'     => array_values($bulan),
-            'trip'       => $trip,
-            'ton'        => $ton,
-            'retribusi'  => $retribusi,
-            'unpaidJml'  => Invoice::where('status', 'unpaid')->count(),
-            'unpaidNom'  => (float) Invoice::where('status', 'unpaid')->sum('total'),
-            'paidBulan'  => (float) Invoice::where('status', 'paid')
-                ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('total'),
-        ];
+    $trip = $ton = $retribusi = [];
+    foreach ($bulan as $ym => $label) {
+        $trip[]      = (int) ($log[$ym]->trip ?? 0);
+        $ton[]       = round((float) ($log[$ym]->ton ?? 0), 2);
+        $retribusi[] = (float) ($uang[$ym] ?? 0);
     }
 
+    // Rata-rata per tahun yang dipilih
+    $awalTahun  = \Carbon\Carbon::create($tahun, 1, 1)->startOfDay();
+    $akhirTahun = $awalTahun->copy()->endOfYear();
+
+    $tahunIni = DB::table('gatepass_logs')
+        ->whereBetween('waktu_masuk', [$awalTahun, $akhirTahun])
+        ->selectRaw('count(*) as trip, coalesce(sum(volume_ton), 0) as ton')
+        ->first();
+
+    $tonTahun  = (float) $tahunIni->ton;
+    $tripTahun = (int) $tahunIni->trip;
+
+    $berjalan = $tahun === now()->year;
+    $jmlHari  = $berjalan ? now()->dayOfYear : $awalTahun->daysInYear;
+    $jmlBulan = $berjalan ? now()->month : 12;
+
+    // Daftar tahun dari data yang ada
+    $daftarTahun = DB::table('gatepass_logs')
+        ->whereNotNull('waktu_masuk')
+        ->selectRaw('substr(waktu_masuk, 1, 4) as y')->distinct()->pluck('y')
+        ->map(fn ($y) => (int) $y)
+        ->push(now()->year)->push($tahun)
+        ->unique()->sortDesc()->values()->all();
+    
+    $bulanan      = $this->bulananTpa($tahun);
+    $bulananLalu  = $this->bulananTpa($tahun - 1);
+
+    return [
+        'labels'      => array_values($bulan),
+        'trip'        => $trip,
+        'ton'         => $ton,
+        'retribusi'   => $retribusi,
+        'unpaidJml'   => Invoice::where('status', 'unpaid')->count(),
+        'unpaidNom'   => (float) Invoice::where('status', 'unpaid')->sum('total'),
+        'paidBulan'   => (float) Invoice::where('status', 'paid')
+            ->whereBetween('created_at', [now()->startOfMonth(), now()->endOfMonth()])->sum('total'),
+
+        'tahun'       => $tahun,
+        'berjalan'    => $berjalan,
+        'daftarTahun' => $daftarTahun,
+        'tahunTon'    => round($tonTahun, 2),
+        'tahunTrip'   => $tripTahun,
+        'rataHari'    => round($tonTahun / $jmlHari, 2),
+        'rataBulan'   => round($tonTahun / $jmlBulan, 2),
+        'rataTrip'    => $tripTahun > 0 ? round($tonTahun / $tripTahun, 2) : 0,
+        'bulanan'     => $bulanan,
+        'bulananLalu' => $bulananLalu,
+    ];
+}
     private function pungutan(): array
     {
         $bulan = $this->enamBulan();
@@ -201,4 +245,33 @@ class DashboardController extends Controller
             'totalKg'  => round($totalSemua, 1),
         ];
     }
+    /** Data 12 bulan (Jan–Des) untuk satu tahun: trip, ton, rata-rata ton/trip, retribusi terbayar */
+private function bulananTpa(int $tahun): array
+{
+    $awal  = \Carbon\Carbon::create($tahun, 1, 1)->startOfDay();
+    $akhir = $awal->copy()->endOfYear();
+
+    $log = DB::table('gatepass_logs')
+        ->whereBetween('waktu_masuk', [$awal, $akhir])
+        ->selectRaw('substr(waktu_masuk, 1, 7) as ym, count(*) as trip, sum(volume_ton) as ton')
+        ->groupBy('ym')->get()->keyBy('ym');
+
+    $uang = Invoice::whereBetween('created_at', [$awal, $akhir])->where('status', 'paid')
+        ->selectRaw('substr(created_at, 1, 7) as ym, sum(total) as total')
+        ->groupBy('ym')->pluck('total', 'ym');
+
+    $trip = $ton = $rataTrip = $retribusi = [];
+    for ($m = 1; $m <= 12; $m++) {
+        $ym = sprintf('%d-%02d', $tahun, $m);
+        $t  = (int) ($log[$ym]->trip ?? 0);
+        $n  = round((float) ($log[$ym]->ton ?? 0), 2);
+
+        $trip[]      = $t;
+        $ton[]       = $n;
+        $rataTrip[]  = $t > 0 ? round($n / $t, 2) : 0;
+        $retribusi[] = (float) ($uang[$ym] ?? 0);
+    }
+
+    return compact('trip', 'ton', 'rataTrip', 'retribusi');
+}
 }

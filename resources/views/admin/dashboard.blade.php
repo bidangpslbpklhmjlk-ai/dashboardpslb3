@@ -1,145 +1,203 @@
 @extends('layouts.admin')
 @section('title', 'Dashboard')
 
-@php
-    $rp  = fn ($n) => 'Rp ' . number_format($n, 0, ',', '.');
-    $kondisiLabel = ['baik' => 'Baik', 'rusak_ringan' => 'Rusak ringan', 'rusak_berat' => 'Rusak berat', 'tidak_beroperasi' => 'Tidak beroperasi', 'belum_diisi' => 'Belum diisi'];
-
-    // Analisis singkat otomatis
-    $analisis = [];
-    if ($tpa) {
-        $n = count($tpa['ton']);
-        if ($n >= 2 && $tpa['ton'][$n-2] > 0) {
-            $d = round(($tpa['ton'][$n-1] - $tpa['ton'][$n-2]) / $tpa['ton'][$n-2] * 100, 1);
-            $analisis[] = 'Volume sampah masuk TPA bulan ini ' . ($d >= 0 ? 'naik ' : 'turun ') . abs($d) . '% dibanding bulan lalu.';
-        }
-        if ($tpa['unpaidJml'] > 0) {
-            $analisis[] = "Ada {$tpa['unpaidJml']} invoice retribusi TPA belum dibayar senilai " . $rp($tpa['unpaidNom']) . '.';
-        }
-    }
-    if ($armada && $armada['rusakAktif'] > 0) {
-        $analisis[] = "{$armada['rusakAktif']} armada sedang rusak dan perlu pengalihan/perbaikan.";
-    }
-    if ($pungutan && $pungutan['belumLunas'] > 0) {
-        $analisis[] = "Pungutan belum lunas: {$pungutan['belumLunas']} invoice (" . $rp($pungutan['nomBelumLunas']) . ').';
-    }
-    if ($neraca && $neraca['pctResidu'] !== null) {
-        $analisis[] = "Dari data neraca 6 bulan terakhir, {$neraca['pctResidu']}% timbulan berupa residu dan {$neraca['pctOlah']}% terkelola (organik + anorganik).";
-    }
-@endphp
-
 @section('content')
 <div class="p-6 lg:p-8 space-y-6">
 
-    {{-- Analisis ringkas --}}
-    @if($analisis)
-        <div class="bg-white rounded-2xl border border-slate-200/80 p-5">
-            <h3 class="text-sm font-bold text-slate-900 mb-3">Analisis Ringkas</h3>
-            <ul class="space-y-1.5 text-sm text-slate-600 list-disc pl-5">
-                @foreach($analisis as $a) <li>{{ $a }}</li> @endforeach
-            </ul>
+@if($tpa)
+    @php
+        $f   = fn ($n) => number_format($n, 2, ',', '.');
+        $bln = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+
+        $tahun = $tpa['tahun'];
+        $lalu  = $tahun - 1;
+        $batas = $tpa['berjalan'] ? now()->month : 12;   // jumlah bulan yang sudah berjalan
+
+        $tonBerjalan = array_slice($tpa['bulanan']['ton'], 0, $batas);
+        $tonLaluSama = array_sum(array_slice($tpa['bulananLalu']['ton'], 0, $batas));
+
+        // Ringkasan otomatis
+        $ringkas = [];
+        if (array_sum($tonBerjalan) > 0) {
+            $iMax = array_search(max($tonBerjalan), $tonBerjalan);
+            $iMin = array_search(min($tonBerjalan), $tonBerjalan);
+            $ringkas[] = "Volume tertinggi terjadi pada bulan {$bln[$iMax]} ({$f($tonBerjalan[$iMax])} ton).";
+            $ringkas[] = "Volume terendah terjadi pada bulan {$bln[$iMin]} ({$f($tonBerjalan[$iMin])} ton).";
+        }
+        if ($tonLaluSama > 0) {
+            $selisih   = round(($tpa['tahunTon'] - $tonLaluSama) / $tonLaluSama * 100, 1);
+            $ringkas[] = "Dibanding periode yang sama tahun {$lalu}, volume " . ($selisih >= 0 ? 'naik ' : 'turun ') . abs($selisih) . '%.';
+        }
+
+        // Data untuk Chart.js
+        $chartData = [
+            'labels'     => $bln,
+            'tahun'      => $tahun,
+            'lalu'       => $lalu,
+            'ton'        => $tpa['bulanan']['ton'],
+            'tonLalu'    => $tpa['bulananLalu']['ton'],
+            'trip'       => $tpa['bulanan']['trip'],
+            'rataTrip'   => $tpa['bulanan']['rataTrip'],
+            'retribusi'  => $tpa['bulanan']['retribusi'],
+        ];
+    @endphp
+
+    {{-- ============ Kartu Sampah Masuk TPA ============ --}}
+    <div class="bg-white rounded-2xl border border-slate-200/80 overflow-hidden">
+        <div class="bg-green-700 px-5 py-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+                <h3 class="text-sm font-bold text-white">Sampah Masuk TPA</h3>
+                <p class="text-xs text-green-100">
+                    @if($tpa['berjalan'])
+                        Tahun berjalan, per {{ now()->translatedFormat('d F Y') }}
+                    @else
+                        Data setahun penuh
+                    @endif
+                </p>
+            </div>
+            <form id="formTahun" method="GET" action="{{ route('admin.dashboard') }}" class="flex items-center gap-2">
+                <label for="tahun" class="text-xs font-medium text-green-100">Tahun</label>
+                <select name="tahun" id="tahun" onchange="this.form.requestSubmit()"
+                        class="bg-white text-slate-800 text-sm font-semibold rounded-lg border-0 py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-green-300">
+                    @foreach($tpa['daftarTahun'] as $th)
+                        <option value="{{ $th }}" @selected($th === $tahun)>{{ $th }}</option>
+                    @endforeach
+                </select>
+            </form>
         </div>
-    @endif
 
-    {{-- Kartu ringkasan --}}
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        @if($armada)
-            @include('admin.partials.stat', ['label' => 'Armada Aktif', 'value' => $armada['aktif'], 'sub' => 'dari ' . $armada['total'] . ' terdata'])
-            @include('admin.partials.stat', ['label' => 'Armada Rusak', 'value' => $armada['rusakAktif'], 'sub' => 'belum selesai', 'warn' => $armada['rusakAktif'] > 0])
-        @endif
-        @if($rute)
-            @include('admin.partials.stat', ['label' => 'Rute / Lokasi', 'value' => $rute['rute'] . ' / ' . $rute['lokasi'], 'sub' => $rute['armadaTerjadwal'] . ' armada terjadwal'])
-            @include('admin.partials.stat', ['label' => 'Check-in Hari Ini', 'value' => $rute['checkinHariIni'], 'sub' => 'pengambilan sampah'])
-        @endif
-        @if($tpa)
-            @include('admin.partials.stat', ['label' => 'Retribusi TPA (bulan ini)', 'value' => $rp($tpa['paidBulan']), 'sub' => $tpa['unpaidJml'] . ' belum dibayar'])
-        @endif
-        @if($pungutan)
-            @include('admin.partials.stat', ['label' => 'Pungutan Hari Ini', 'value' => $pungutan['hariIni'], 'sub' => $pungutan['selesaiBln'] . ' selesai, ' . $pungutan['batalBln'] . ' batal (bulan ini)'])
-        @endif
-        @if($industri)
-            @include('admin.partials.stat', ['label' => 'Industri Aktif', 'value' => $industri['aktif'], 'sub' => $industri['punyaLaporan'] . ' punya laporan ' . now()->year])
-        @endif
-        @if($neraca)
-            @include('admin.partials.stat', ['label' => 'Timbulan (6 bln)', 'value' => number_format($neraca['totalKg'] / 1000, 1, ',', '.') . ' ton', 'sub' => 'neraca sampah industri'])
-        @endif
+        <div class="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-slate-100">
+            <div class="p-5">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Rata-rata per hari</p>
+                <p class="mt-1 text-2xl font-bold text-slate-900">{{ $f($tpa['rataHari']) }} <span class="text-sm font-medium text-slate-500">ton</span></p>
+            </div>
+            <div class="p-5">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Rata-rata per bulan</p>
+                <p class="mt-1 text-2xl font-bold text-slate-900">{{ $f($tpa['rataBulan']) }} <span class="text-sm font-medium text-slate-500">ton</span></p>
+            </div>
+            <div class="p-5">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Rata-rata per trip</p>
+                <p class="mt-1 text-2xl font-bold text-slate-900">{{ $f($tpa['rataTrip']) }} <span class="text-sm font-medium text-slate-500">ton</span></p>
+            </div>
+            <div class="p-5">
+                <p class="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Total tahun {{ $tahun }}</p>
+                <p class="mt-1 text-2xl font-bold text-slate-900">{{ $f($tpa['tahunTon']) }} <span class="text-sm font-medium text-slate-500">ton</span></p>
+                <p class="text-xs text-slate-400 mt-0.5">{{ number_format($tpa['tahunTrip'], 0, ',', '.') }} trip</p>
+            </div>
+        </div>
     </div>
 
-    {{-- Grafik --}}
-    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
-        @if($tpa)
-            <div class="bg-white rounded-2xl border border-slate-200/80 p-5">
-                <h3 class="text-sm font-bold text-slate-900 mb-3">TPA: Volume (ton) &amp; Retribusi Terbayar</h3>
-                <div class="h-64"><canvas id="cTpa"></canvas></div>
+    {{-- ============ Analisa Grafis (dropdown) ============ --}}
+    <div class="bg-white rounded-2xl border border-slate-200/80 overflow-hidden" id="analisa">
+        <button type="button" id="btnAnalisa" aria-expanded="false" aria-controls="panelAnalisa"
+                class="w-full flex items-center justify-between px-5 py-4 text-left hover:bg-slate-50 transition">
+            <span>
+                <span class="block text-sm font-bold text-slate-900">Analisa Grafis Sampah Masuk TPA</span>
+                <span class="block text-xs text-slate-500">Tahun {{ $tahun }}, klik untuk menampilkan</span>
+            </span>
+            <svg id="iconAnalisa" class="w-5 h-5 text-slate-500 transition-transform duration-200"
+                 fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"/>
+            </svg>
+        </button>
+
+        <div id="panelAnalisa" class="hidden border-t border-slate-100 p-5 space-y-6">
+            @if($ringkas)
+                <ul class="space-y-1.5 text-sm text-slate-600 list-disc pl-5">
+                    @foreach($ringkas as $r) <li>{{ $r }}</li> @endforeach
+                </ul>
+            @endif
+
+            <div class="grid grid-cols-1 xl:grid-cols-2 gap-6">
+                <div class="rounded-xl border border-slate-200/80 p-4">
+                    <h4 class="text-sm font-bold text-slate-900 mb-3">Volume per Bulan (ton): {{ $tahun }} vs {{ $lalu }}</h4>
+                    <div class="h-64"><canvas id="cTpaTon"></canvas></div>
+                </div>
+                <div class="rounded-xl border border-slate-200/80 p-4">
+                    <h4 class="text-sm font-bold text-slate-900 mb-3">Jumlah Trip per Bulan</h4>
+                    <div class="h-64"><canvas id="cTpaTrip"></canvas></div>
+                </div>
+                <div class="rounded-xl border border-slate-200/80 p-4">
+                    <h4 class="text-sm font-bold text-slate-900 mb-3">Rata-rata Muatan per Trip (ton)</h4>
+                    <div class="h-64"><canvas id="cTpaRata"></canvas></div>
+                </div>
+                <div class="rounded-xl border border-slate-200/80 p-4">
+                    <h4 class="text-sm font-bold text-slate-900 mb-3">Retribusi Terbayar per Bulan (Rp)</h4>
+                    <div class="h-64"><canvas id="cTpaRetribusi"></canvas></div>
+                </div>
             </div>
-        @endif
-        @if($pungutan)
-            <div class="bg-white rounded-2xl border border-slate-200/80 p-5">
-                <h3 class="text-sm font-bold text-slate-900 mb-3">Pungutan Terbayar per Bulan</h3>
-                <div class="h-64"><canvas id="cPungutan"></canvas></div>
-            </div>
-        @endif
-        @if($neraca)
-            <div class="bg-white rounded-2xl border border-slate-200/80 p-5">
-                <h3 class="text-sm font-bold text-slate-900 mb-3">Neraca Sampah per Bulan (kg)</h3>
-                <div class="h-64"><canvas id="cNeraca"></canvas></div>
-            </div>
-            <div class="bg-white rounded-2xl border border-slate-200/80 p-5">
-                <h3 class="text-sm font-bold text-slate-900 mb-3">5 Industri dengan Timbulan Terbesar ({{ now()->year }})</h3>
-                @forelse($neraca['top'] as $row)
-                    <div class="flex justify-between text-sm py-2 border-b border-slate-100 last:border-0">
-                        <span class="text-slate-700 truncate pr-3">{{ $row['nama'] }}</span>
-                        <span class="font-semibold text-slate-900">{{ number_format($row['kg'], 1, ',', '.') }} kg</span>
-                    </div>
-                @empty
-                    <p class="text-sm text-slate-400">Belum ada data harian tahun ini.</p>
-                @endforelse
-            </div>
-        @endif
-        @if($armada)
-            <div class="bg-white rounded-2xl border border-slate-200/80 p-5">
-                <h3 class="text-sm font-bold text-slate-900 mb-3">Kondisi Armada Aktif</h3>
-                <div class="h-64"><canvas id="cArmada"></canvas></div>
-            </div>
-        @endif
+        </div>
     </div>
+@endif
+
 </div>
 
+@if($tpa)
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
+    const d     = @json($chartData);
+    const btn   = document.getElementById('btnAnalisa');
+    const panel = document.getElementById('panelAnalisa');
+    const icon  = document.getElementById('iconAnalisa');
+    const KEY   = 'dashboardAnalisaOpen';
+
+    const rp  = v => 'Rp ' + Number(v).toLocaleString('id-ID');
     const opt = { responsive: true, maintainAspectRatio: false };
-    const mk = (id, cfg) => { const el = document.getElementById(id); if (el) new Chart(el, cfg); };
+    const noLegend = { legend: { display: false } };
+    const yZero = { y: { beginAtZero: true } };
 
-    @if($tpa)
-    mk('cTpa', { data: { labels: @json($tpa['labels']), datasets: [
-        { type: 'bar',  label: 'Volume (ton)', data: @json($tpa['ton']), backgroundColor: '#15803d', yAxisID: 'y' },
-        { type: 'line', label: 'Retribusi (Rp)', data: @json($tpa['retribusi']), borderColor: '#f59e0b', yAxisID: 'y1' }
-    ]}, options: { ...opt, scales: { y: { beginAtZero: true }, y1: { position: 'right', beginAtZero: true, grid: { drawOnChartArea: false } } } } });
-    @endif
+    let rendered = false;
+    function renderCharts() {
+        if (rendered) return;
+        rendered = true;
 
-    @if($pungutan)
-    mk('cPungutan', { type: 'bar', data: { labels: @json($pungutan['labels']), datasets: [
-        { label: 'Rp', data: @json($pungutan['nilai']), backgroundColor: '#0f766e' }
-    ]}, options: { ...opt, plugins: { legend: { display: false } } } });
-    @endif
+        new Chart('cTpaTon', {
+            data: { labels: d.labels, datasets: [
+                { type: 'bar',  label: d.tahun, data: d.ton,     backgroundColor: '#15803d' },
+                { type: 'line', label: d.lalu,  data: d.tonLalu, borderColor: '#f59e0b', backgroundColor: '#f59e0b', tension: .3 }
+            ]},
+            options: { ...opt, scales: yZero }
+        });
 
-    @if($neraca)
-    mk('cNeraca', { type: 'bar', data: { labels: @json($neraca['labels']), datasets: [
-        { label: 'Organik',   data: @json($neraca['organik']),   backgroundColor: '#16a34a' },
-        { label: 'Anorganik', data: @json($neraca['anorganik']), backgroundColor: '#2563eb' },
-        { label: 'Residu',    data: @json($neraca['residu']),    backgroundColor: '#94a3b8' }
-    ]}, options: { ...opt, scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } } } });
-    @endif
+        new Chart('cTpaTrip', {
+            type: 'bar',
+            data: { labels: d.labels, datasets: [{ label: 'Trip', data: d.trip, backgroundColor: '#0f766e' }] },
+            options: { ...opt, plugins: noLegend, scales: yZero }
+        });
 
-    @if($armada)
-    @php
-        $lbl = collect($armada['kondisi'])->keys()->map(fn ($k) => $kondisiLabel[$k] ?? $k)->values();
-    @endphp
-    mk('cArmada', { type: 'doughnut', data: { labels: @json($lbl), datasets: [
-        { data: @json(array_values($armada['kondisi'])), backgroundColor: ['#16a34a', '#f59e0b', '#dc2626', '#64748b', '#cbd5e1'] }
-    ]}, options: opt });
-    @endif
+        new Chart('cTpaRata', {
+            type: 'line',
+            data: { labels: d.labels, datasets: [
+                { label: 'ton/trip', data: d.rataTrip, borderColor: '#2563eb', backgroundColor: '#2563eb', tension: .3 }
+            ]},
+            options: { ...opt, plugins: noLegend, scales: yZero }
+        });
+
+        new Chart('cTpaRetribusi', {
+            type: 'bar',
+            data: { labels: d.labels, datasets: [{ label: 'Retribusi', data: d.retribusi, backgroundColor: '#f59e0b' }] },
+            options: {
+                ...opt,
+                plugins: { ...noLegend, tooltip: { callbacks: { label: c => rp(c.parsed.y) } } },
+                scales: { y: { beginAtZero: true, ticks: { callback: v => rp(v) } } }
+            }
+        });
+    }
+
+    function toggle(open) {
+        panel.classList.toggle('hidden', !open);
+        icon.classList.toggle('rotate-180', open);
+        btn.setAttribute('aria-expanded', open);
+        sessionStorage.setItem(KEY, open ? '1' : '0');
+        if (open) renderCharts();   // dibuat saat panel terlihat agar ukuran canvas benar
+    }
+
+    btn.addEventListener('click', () => toggle(panel.classList.contains('hidden')));
+
+    // Setelah ganti tahun, panel kembali ke kondisi terakhir (terbuka/tertutup)
+    if (sessionStorage.getItem(KEY) === '1') toggle(true);
 });
 </script>
+@endif
 @endsection
