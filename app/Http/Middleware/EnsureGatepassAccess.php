@@ -12,7 +12,7 @@ class EnsureGatepassAccess
         $user = $request->user();
 
         if (! $user || ! $user->canAccessMenu('gatepass')) {
-            return response()->json(['message' => 'Akun ini tidak punya akses Gatepass.'], 403);
+            return response()->json(['message' => 'Akun ini tidak punya akses TPA (Gatepass).'], 403);
         }
 
         return $next($request);

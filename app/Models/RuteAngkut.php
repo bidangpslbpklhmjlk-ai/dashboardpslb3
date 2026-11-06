@@ -22,7 +22,7 @@ class RuteAngkut extends Model
     public function lokasis()
     {
         return $this->belongsToMany(LokasiAngkut::class, 'rute_angkut_lokasi')
-            ->withPivot('urutan')
+            ->withPivot('urutan', 'pekan')
             ->orderBy('rute_angkut_lokasi.urutan');
     }
 }

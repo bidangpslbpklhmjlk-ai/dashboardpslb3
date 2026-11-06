@@ -12,18 +12,19 @@ class Armada extends Model
     protected $table = 'armadas';
 
     protected $fillable = [
-    'nama',
-    'tipe',
-    'pembayaran',
-    'kategori_object_retribusi_id',
-    'nomor_polisi',
-    'jenis_kendaraan',
-    'tahun_pengadaan',
-    'kondisi',
-    'foto',
-    'alamat',
-    'telepon',
-    'aktif',
+        'nama',
+        'tipe',
+        'pembayaran',
+        'kategori_object_retribusi_id',
+        'nomor_polisi',
+        'pegawai_id',
+        'jenis_kendaraan',
+        'tahun_pengadaan',
+        'kondisi',
+        'foto',
+        'alamat',
+        'telepon',
+        'aktif',
     ];
 
     protected $casts = [
@@ -77,6 +78,23 @@ class Armada extends Model
     public function invoices()
     {
         return $this->hasMany(Invoice::class);
+    }
+
+    public function kategori()
+    {
+        return $this->belongsTo(KategoriObjectRetribusi::class, 'kategori_object_retribusi_id');
+    }
+
+    /** Sopir default armada. */
+    public function sopir()
+    {
+        return $this->belongsTo(Pegawai::class, 'pegawai_id');
+    }
+
+    /** Rute pengangkutan (satu rute = satu hari). */
+    public function rutes()
+    {
+        return $this->hasMany(RuteAngkut::class);
     }
 
     // Scope
@@ -133,8 +151,4 @@ class Armada extends Model
         ];
         return $labels[$this->kondisi] ?? '-';
     }
-        public function kategori()
-        {
-            return $this->belongsTo(KategoriObjectRetribusi::class, 'kategori_object_retribusi_id');
-        }
 }

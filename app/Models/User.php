@@ -124,7 +124,7 @@ public function homeRoute(): ?string
 }
 
 /** Menu yang punya layar di aplikasi Android. Tambah 'checkin' nanti kalau layarnya sudah ada. */
-public const MENU_APP = ['gatepass'];
+public const MENU_APP = ['gatepass', 'checkin'];
 
 public function menuApp(): array
 {

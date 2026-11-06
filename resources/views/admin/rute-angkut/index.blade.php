@@ -174,6 +174,7 @@
                                                 <span class="text-slate-400 w-4 text-right shrink-0">{{ $loop->iteration }}.</span>
                                                 <span>{{ $l->nama }}
                                                     @if($l->desa)<span class="text-slate-400">· {{ $l->desa }}</span>@endif
+                                                    @if($l->pivot->pekan)<span class="ml-1 px-1.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">M{{ $l->pivot->pekan }}</span>@endif
                                                 </span>
                                             </li>
                                         @endforeach

@@ -270,7 +270,8 @@ class PenugasanService
     private function pecah(PenugasanHarian $row, array $targets, ArmadaKerusakan $k, Carbon $sampai, ?string $alasan): array
     {
         $row->loadMissing('lokasi');
-        $universe = $row->lokasi->pluck('id')->map(fn ($v) => (int) $v)->all() ?: ($this->lokasiRute($row->rute_angkut_id) ?? []);
+                $universe = $row->lokasi->pluck('id')->map(fn ($v) => (int) $v)->all()
+            ?: ($this->lokasiRute($row->rute_angkut_id, $row->tanggal) ?? []);
         $semuaAlokasi = collect($targets)->flatMap(fn ($t) => $t['lokasi'])->map(fn ($v) => (int) $v)->unique()->all();
 
         if (! $universe || array_diff($universe, $semuaAlokasi)) {
@@ -347,10 +348,28 @@ class PenugasanService
         return $pulih;
     }
 
-    /** Daftar id lokasi milik sebuah rute (tabel pivot rute_angkut_lokasi). */
-    public function lokasiRute(int $ruteId): ?array
+    /** Pekan ke berapa (1..siklus) untuk tanggal ini, dihitung dari tanggal acuan. */
+    public function pekanKe(Carbon $tgl): int
+    {
+        $siklus  = max(1, (int) config('jadwal.siklus', 2));
+        $acuan   = Carbon::parse(config('jadwal.pekan_acuan'))->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $senin   = $tgl->copy()->startOfWeek(Carbon::MONDAY)->startOfDay();
+        $selisih = (int) round(($senin->getTimestamp() - $acuan->getTimestamp()) / 604800);
+
+        return ((($selisih % $siklus) + $siklus) % $siklus) + 1;
+    }
+
+    /** Apakah lokasi dengan tanda pekan ini berlaku pada tanggal tersebut. null = tiap minggu. */
+    public function berlakuPada($pekan, Carbon $tgl): bool
+    {
+        return $pekan === null || (int) $pekan === $this->pekanKe($tgl);
+    }
+
+    /** Daftar id lokasi sebuah rute. Dengan $tgl: hanya yang berlaku pada pekan tanggal itu. */
+    public function lokasiRute(int $ruteId, ?Carbon $tgl = null): ?array
     {
         return DB::table('rute_angkut_lokasi')->where('rute_angkut_id', $ruteId)
+            ->when($tgl, fn ($q) => $q->where(fn ($w) => $w->whereNull('pekan')->orWhere('pekan', $this->pekanKe($tgl))))
             ->orderBy('urutan')->pluck('lokasi_angkut_id')->map(fn ($v) => (int) $v)->all();
     }
 }

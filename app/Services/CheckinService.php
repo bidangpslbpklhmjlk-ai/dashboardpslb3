@@ -39,8 +39,9 @@ class CheckinService
             ->whereIn('rute_angkut_id', $rutes->pluck('id'))->get()
             ->groupBy('rute_angkut_id');
 
-        $pivot = DB::table('rute_angkut_lokasi')->whereIn('rute_angkut_id', $rutes->pluck('id'))
-            ->orderBy('urutan')->get()->groupBy('rute_angkut_id');
+                $pivot = DB::table('rute_angkut_lokasi')->whereIn('rute_angkut_id', $rutes->pluck('id'))
+            ->orderBy('urutan')->get()->groupBy('rute_angkut_id')
+            ->map(fn ($g) => $g->filter(fn ($p) => $this->penugasan->berlakuPada($p->pekan, $tgl))->values());
         $lokasi = LokasiAngkut::whereIn('id', $pivot->flatten()->pluck('lokasi_angkut_id')->unique())->get()->keyBy('id');
 
         $out = [];
@@ -74,8 +75,8 @@ class CheckinService
             if (! in_array($tgl->dayOfWeekIso, $this->penugasan->hariList($rute->hari), true)) {
                 throw ValidationException::withMessages(['rute_id' => 'Rute ini tidak dijadwalkan pada tanggal tersebut.']);
             }
-            if (! in_array($lid, $this->penugasan->lokasiRute($rute->id) ?? [], true)) {
-                throw ValidationException::withMessages(['lokasi_angkut_id' => 'Lokasi bukan bagian dari rute ini.']);
+            if (! in_array($lid, $this->penugasan->lokasiRute($rute->id, $tgl) ?? [], true)) {
+                throw ValidationException::withMessages(['lokasi_angkut_id' => 'Lokasi tidak dijadwalkan pada pekan ini.']);
             }
             if (Carbon::parse($d['waktu_kejadian'])->toDateString() !== $tgl->toDateString()) {
                 throw ValidationException::withMessages(['waktu_kejadian' => 'Waktu check-in harus berada di tanggal yang dipilih.']);
@@ -219,5 +220,60 @@ class CheckinService
                 $ritasi++;
             }
         }
+    }
+        /** Check-in dari aplikasi sopir. Penugasan dicari atau dibuat dari rute, GPS ikut dicatat. */
+    public function simpanDariApp(int $ruteId, int $lokasiId, array $d, array $foto, int $userId, ?int $pegawaiId): Checkin
+    {
+        return DB::transaction(function () use ($ruteId, $lokasiId, $d, $foto, $userId, $pegawaiId) {
+            $tgl  = Carbon::today();
+            $rute = RuteAngkut::lockForUpdate()->where('aktif', true)->findOrFail($ruteId);
+
+            if (! in_array($tgl->dayOfWeekIso, $this->penugasan->hariList($rute->hari), true)) {
+                throw ValidationException::withMessages(['rute_id' => 'Rute ini tidak dijadwalkan hari ini.']);
+            }
+            if (! in_array($lokasiId, $this->penugasan->lokasiRute($rute->id, $tgl) ?? [], true)) {
+                throw ValidationException::withMessages(['lokasi_angkut_id' => 'Lokasi tidak dijadwalkan pada pekan ini.']);
+            }
+
+            $rows = PenugasanHarian::with('lokasi')->whereDate('tanggal', $tgl->toDateString())
+                ->where('rute_angkut_id', $rute->id)->where('status', '!=', 'batal')->get();
+            $row = $this->cariPenugasan($rows, $lokasiId) ?? PenugasanHarian::create([
+                'tanggal'        => $tgl->toDateString(),
+                'rute_angkut_id' => $rute->id,
+                'armada_id'      => $rute->armada_id,
+                'pegawai_id'     => null,
+                'status'         => 'direncanakan',
+                'sumber'         => 'manual',
+            ]);
+
+            if ($pegawaiId && ! $row->pegawai_id) {
+                $row->update(['pegawai_id' => $pegawaiId]);
+            }
+
+            $c = Checkin::create([
+                'penugasan_id'     => $row->id,
+                'ritasi_ke'        => 1,
+                'lokasi_angkut_id' => $lokasiId,
+                'waktu_kejadian'   => $d['waktu_kejadian'],
+                'latitude'         => $d['latitude'],
+                'longitude'        => $d['longitude'],
+                'akurasi_gps'      => $d['akurasi_gps'] ?? null,
+                'sumber'           => 'app',
+                'dicatat_oleh'     => $userId,
+                'flag'             => $d['flag'] ?: null,
+                'client_uuid'      => $d['client_uuid'],
+                'catatan'          => $d['catatan'] ?? null,
+            ]);
+
+            $this->isiSampah($c, $d['sampah'] ?? []);
+            $this->simpanFoto($c, $foto);
+
+            if ($row->status === 'direncanakan') {
+                $row->update(['status' => 'berjalan']);
+            }
+            $this->hitungUlangRitasi((int) $row->armada_id, $tgl->toDateString());
+
+            return $c->fresh();
+        });
     }
 }

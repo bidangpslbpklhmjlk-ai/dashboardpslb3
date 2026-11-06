@@ -34,6 +34,7 @@ use App\Http\Controllers\Admin\NeracaSampahController;
 use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LoginLogController;
 use App\Http\Controllers\Admin\VersiAplikasiController;
+use App\Http\Controllers\Admin\JadwalArmadaController;
 
 // ==========================================
 // TES
@@ -139,6 +140,11 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
 Route::middleware('menu:armada')->group(function () {
     Route::resource('armada', ArmadaController::class)
         ->except(['create', 'edit']);
+});
+
+// --- JADWAL ARMADA (tampilan per nomor polisi) ---
+Route::middleware('menu:jadwal-armada')->group(function () {
+    Route::get('jadwal-armada', [JadwalArmadaController::class, 'index'])->name('jadwal-armada.index');
 });
 
     // --- PENUGASAN HARIAN (kalender, override per tanggal) ---

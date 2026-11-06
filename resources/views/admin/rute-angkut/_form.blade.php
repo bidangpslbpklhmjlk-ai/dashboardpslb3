@@ -1,12 +1,13 @@
 {{--
     Form bersama untuk create dan edit rute pengangkutan.
     Variabel: $rute (null saat create), $action, $method, $armadas, $hariList,
-              $lokasiData, $selectedIds, $kecamatanList
+              $lokasiData, $selectedIds, $selectedPekan, $kecamatanList
 --}}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 
 <form method="POST" action="{{ $action }}" class="space-y-6">
     @csrf
+    <input type="hidden" name="kembali" value="{{ request('kembali') }}">
     @if($method !== 'POST')
         @method($method)
     @endif
@@ -32,7 +33,7 @@
                         class="w-full rounded-lg border-slate-300 text-sm focus:border-green-600 focus:ring-green-600">
                     <option value="">Pilih armada</option>
                     @foreach($armadas as $a)
-                        <option value="{{ $a->id }}" @selected(old('armada_id', $rute->armada_id ?? null) == $a->id)>
+                        <option value="{{ $a->id }}" @selected(old('armada_id', $rute->armada_id ?? request('armada_id')) == $a->id)>
                             {{ $a->nomor_polisi }}{{ $a->jenis_kendaraan ? ' — ' . $a->jenis_kendaraan : '' }}
                         </option>
                     @endforeach
@@ -90,7 +91,10 @@
 
         <div class="bg-white border border-slate-200/80 rounded-2xl p-5">
             <h2 class="text-sm font-bold text-slate-800">Urutan Rute</h2>
-            <p class="text-xs text-slate-500 mb-3">Tarik <span class="font-semibold">⋮⋮</span> untuk mengubah urutan. Lokasi yang sama boleh ditambah lagi untuk ritasi berikutnya. Angka hijau di kanan adalah jarak ke titik berikutnya.</p>
+            <p class="text-xs text-slate-500 mb-3">
+                Tarik <span class="font-semibold">⋮⋮</span> untuk mengubah urutan. Pilih <strong>Tiap minggu</strong>, <strong>Minggu 1</strong>, atau <strong>Minggu 2</strong> pada tiap lokasi.
+                Lokasi yang sama boleh ditambah lagi untuk ritasi berikutnya. Angka hijau di kanan adalah jarak ke titik berikutnya.
+            </p>
             <ol id="selected-list" class="space-y-2"></ol>
             <p id="selected-empty" class="rounded-lg border border-dashed border-slate-300 px-4 py-8 text-center text-sm text-slate-400">
                 Belum ada lokasi. Klik lokasi di sebelah kiri untuk menambahkan.
@@ -105,14 +109,23 @@
     <div class="bg-white border border-slate-200/80 rounded-2xl overflow-hidden">
         <div class="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-b border-slate-100">
             <h2 class="text-sm font-bold text-slate-800">Pratinjau Rute</h2>
-            <p class="text-sm text-slate-600">Jarak: <span id="distance" class="font-semibold text-slate-900">-</span></p>
+            <div class="flex items-center gap-3">
+                <div class="inline-flex rounded-lg border border-slate-200 overflow-hidden text-xs font-semibold">
+                    <button type="button" id="v1" class="px-3 py-1.5">Minggu 1</button>
+                    <button type="button" id="v2" class="px-3 py-1.5">Minggu 2</button>
+                </div>
+                <p class="text-sm text-slate-600">Jarak: <span id="distance" class="font-semibold text-slate-900">-</span></p>
+            </div>
         </div>
         <div id="preview-map" class="h-[380px] w-full z-0"></div>
-        <p class="px-4 py-2 text-xs text-slate-400">Jarak dan garis rute dihitung otomatis dari urutan lokasi, lalu dihitung ulang dan disimpan saat Anda menekan Simpan.</p>
+        <p class="px-4 py-2 text-xs text-slate-400">Pratinjau menampilkan lokasi yang berlaku pada pekan terpilih. Jarak dan garis yang tersimpan di daftar rute memakai varian Minggu 1.</p>
     </div>
 
     <div class="flex items-center justify-end gap-3">
-        <a href="{{ route('admin.rute-angkut.index') }}" class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</a>
+        <a href="{{ request('kembali') === 'armada'
+                ? route('admin.armada.index', ['buka' => request('armada_id', $rute->armada_id ?? null)])
+                : route('admin.rute-angkut.index') }}"
+           class="px-4 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100">Batal</a>
         <button type="submit" class="px-5 py-2.5 rounded-xl bg-green-700 hover:bg-green-800 text-white text-sm font-semibold shadow-sm transition-colors">
             Simpan Rute
         </button>
@@ -125,7 +138,16 @@
 (function () {
     const LIST = @json($lokasiData);
     const BY_ID = Object.fromEntries(LIST.map((l) => [l.id, l]));
-    let selected = @json($selectedIds).map(Number).filter((id) => BY_ID[id]);
+    const awal = @json($selectedIds).map(Number);
+    const awalPekan = @json($selectedPekan);
+
+    // selected[i] dan pekan[i] selalu sejajar; pekan null = tiap minggu
+    let selected = [];
+    let pekan = [];
+    awal.forEach((id, i) => {
+        if (BY_ID[id]) { selected.push(id); pekan.push(awalPekan[i] ? Number(awalPekan[i]) : null); }
+    });
+    let varian = 1;
 
     const availEl = document.getElementById('available-list');
     const selEl = document.getElementById('selected-list');
@@ -143,11 +165,15 @@
     const wilayah = (l) => [l.desa, l.kecamatan].filter(Boolean).join(', ') || 'Wilayah belum diisi';
     const km = (n) => n.toFixed(1).replace('.', ',') + ' km';
 
-    // Jarak ke titik berikutnya, diisi setelah OSRM menjawab
-    function setLegs(arr) {
+    // indeks (di daftar terpilih) yang berlaku pada varian yang sedang dipratinjau
+    const idxVarian = () => selected.map((_, i) => i).filter((i) => !pekan[i] || pekan[i] === varian);
+
+    function setLegs(arr, idx) {
         Array.from(selEl.children).forEach((li, i) => {
             const s = li.querySelector('.leg');
-            if (s) s.textContent = arr[i] != null ? '→ ' + km(arr[i]) : '';
+            if (!s) return;
+            const n = idx ? idx.indexOf(i) : -1;
+            s.textContent = n >= 0 && arr && arr[n] != null ? '→ ' + km(arr[n]) : '';
         });
     }
 
@@ -156,7 +182,6 @@
         const kec = kecEl.value;
         availEl.replaceChildren();
 
-        // Lokasi yang sudah dipilih tetap tampil: boleh dipakai lagi untuk ritasi berikutnya
         const items = LIST.filter((l) =>
             (!kec || l.kecamatan === kec) &&
             (!q || (l.nama + ' ' + (l.desa || '') + ' ' + (l.kecamatan || '')).toLowerCase().includes(q))
@@ -174,7 +199,7 @@
             const left = el('div');
             left.append(el('p', 'text-sm font-medium text-slate-800', l.nama), el('p', 'text-xs text-slate-500', wilayah(l)));
             b.append(left, el('span', 'text-xs font-semibold text-green-700 whitespace-nowrap', n ? '+ Tambah lagi (' + n + '×)' : '+ Tambah'));
-            b.addEventListener('click', () => { selected.push(l.id); refresh(); });
+            b.addEventListener('click', () => { selected.push(l.id); pekan.push(null); refresh(); });
             availEl.append(b);
         });
     }
@@ -185,7 +210,8 @@
 
         selected.forEach((id, i) => {
             const l = BY_ID[id];
-            const li = el('li', 'flex items-center gap-3 bg-white border border-slate-200 rounded-lg px-3 py-2');
+            const li = el('li', 'flex flex-wrap items-center gap-3 border rounded-lg px-3 py-2 ' +
+                (pekan[i] ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'));
             li.dataset.id = id;
 
             const handle = el('span', 'drag-handle cursor-grab select-none text-slate-400 text-lg leading-none', '⋮⋮');
@@ -199,19 +225,27 @@
             input.name = 'lokasi_ids[]';
             input.value = id;
 
+            const sel = document.createElement('select');
+            sel.name = 'pekan[]';
+            sel.className = 'text-xs rounded-md border-slate-300 py-1 pl-2 pr-7 focus:border-green-600 focus:ring-green-600';
+            [['', 'Tiap minggu'], ['1', 'Minggu 1'], ['2', 'Minggu 2']].forEach(([v, t]) => {
+                const o = el('option', '', t);
+                o.value = v;
+                if ((pekan[i] ? String(pekan[i]) : '') === v) o.selected = true;
+                sel.append(o);
+            });
+            sel.addEventListener('change', () => { pekan[i] = sel.value ? Number(sel.value) : null; refresh(); });
+
             const rm = el('button', 'text-slate-400 hover:text-red-600 text-sm px-1', '✕');
             rm.type = 'button';
             rm.title = 'Hapus titik ini dari rute';
-            // Hapus hanya baris ini, bukan semua kemunculan lokasi yang sama
-            rm.addEventListener('click', () => { selected.splice(i, 1); refresh(); });
+            rm.addEventListener('click', () => { selected.splice(i, 1); pekan.splice(i, 1); refresh(); });
 
-            li.append(handle, num, info, leg, input, rm);
+            li.append(handle, num, info, leg, sel, input, rm);
             selEl.append(li);
         });
     }
 
-    renderAvailable();
-    renderSelected();
     // --- Peta pratinjau ---
     const map = L.map('preview-map').setView([-6.8366, 108.2274], 10);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -222,7 +256,6 @@
     let timer = null;
     let reqId = 0;
 
-    // Lokasi yang dikunjungi berulang mendapat satu penanda dengan nomor gabungan, mis. "2,4"
     const numIcon = (label) => L.divIcon({
         className: '',
         iconSize: [0, 0],
@@ -235,14 +268,23 @@
         if (layer.getLayers().length) map.fitBounds(layer.getBounds().pad(0.15));
     }
 
+    function aturTombol() {
+        [1, 2].forEach((v) => {
+            document.getElementById('v' + v).className = 'px-3 py-1.5 ' +
+                (varian === v ? 'bg-green-700 text-white' : 'bg-white text-slate-600 hover:bg-slate-50');
+        });
+    }
+
     async function drawMap() {
         layer.clearLayers();
-        setLegs([]);
-        const pts = selected.map((id) => BY_ID[id]);
+        const idx = idxVarian();
+        setLegs([], null);
+        const pts = idx.map((i) => BY_ID[selected[i]]);
 
         const grup = {};
-        selected.forEach((id, i) => {
-            (grup[id] = grup[id] || { l: BY_ID[id], no: [] }).no.push(i + 1);
+        idx.forEach((i, n) => {
+            const id = selected[i];
+            (grup[id] = grup[id] || { l: BY_ID[id], no: [] }).no.push(n + 1);
         });
         Object.values(grup).forEach((g) =>
             L.marker([g.l.lat, g.l.lng], { icon: numIcon(g.no.join(',')) })
@@ -268,8 +310,8 @@
             if (data.code === 'Ok' && data.routes && data.routes.length) {
                 const r = data.routes[0];
                 L.polyline(r.geometry.coordinates.map((c) => [c[1], c[0]]), { color: '#15803d', weight: 5, opacity: 0.85 }).addTo(layer);
-                distEl.textContent = 'Total ' + km(r.distance / 1000) + ' · ' + pts.length + ' titik';
-                setLegs((r.legs || []).map((x) => x.distance / 1000));
+                distEl.textContent = 'Minggu ' + varian + ': ' + km(r.distance / 1000) + ' · ' + pts.length + ' titik';
+                setLegs((r.legs || []).map((x) => x.distance / 1000), idx);
                 fit();
                 return;
             }
@@ -293,15 +335,20 @@
             handle: '.drag-handle',
             animation: 150,
             onEnd: () => {
-                selected = Array.from(selEl.children).map((li) => Number(li.dataset.id));
+                const items = Array.from(selEl.children);
+                selected = items.map((li) => Number(li.dataset.id));
+                pekan = items.map((li) => { const v = li.querySelector('select').value; return v ? Number(v) : null; });
                 refresh();
             }
         });
     }
 
+    document.getElementById('v1').addEventListener('click', () => { varian = 1; aturTombol(); drawMap(); });
+    document.getElementById('v2').addEventListener('click', () => { varian = 2; aturTombol(); drawMap(); });
     searchEl.addEventListener('input', renderAvailable);
     kecEl.addEventListener('change', renderAvailable);
 
+    aturTombol();
     refresh();
 })();
 </script>

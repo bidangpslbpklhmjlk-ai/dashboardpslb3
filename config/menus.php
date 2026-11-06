@@ -15,6 +15,7 @@ return [
     // 'berita'        => ['label' => 'Berita Carousel',       'route' => 'admin.berita.index',        'group' => 'Utama'],
     // 'akuntabilitas' => ['label' => 'Dokumen Akuntabilitas', 'route' => 'admin.akuntabilitas.index', 'group' => 'Utama'],
     'armada'        => ['label' => 'Data Armada',           'route' => 'admin.armada.index',        'group' => 'Utama'],
+    'jadwal-armada' => ['label' => 'Jadwal Armada', 'route' => 'admin.jadwal-armada.index', 'group' => 'Utama'],
     'rute-angkut'   => ['label' => 'Rute Pengangkutan',     'route' => 'admin.rute-angkut.index',   'group' => 'Utama'],
     'gatepass'      => ['label' => 'TPA (Gatepass)',        'route' => 'admin.gatepass.index',      'group' => 'Utama', 'nav' => 'TPA'],
     'tarif'         => ['label' => 'Tarif',                 'route' => 'admin.tarif.index',         'group' => 'Utama'],

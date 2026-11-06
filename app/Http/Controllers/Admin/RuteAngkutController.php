@@ -80,7 +80,7 @@ class RuteAngkutController extends Controller
                 'color'    => $color,
                 'jarak'    => (float) $rute->total_jarak,
                 'geometry' => $geometry,
-                'points'   => $rute->lokasis->map(fn ($l) => [
+                                'points'   => $rute->lokasis->filter(fn ($l) => in_array($l->pivot->pekan, [null, 1]))->map(fn ($l) => [
                     'id'        => $l->id,
                     'lat'       => (float) $l->latitude,
                     'lng'       => (float) $l->longitude,
@@ -118,13 +118,14 @@ class RuteAngkutController extends Controller
         return view('admin.rute-angkut.create', $this->formData());
     }
 
-    public function store(Request $request)
+     public function store(Request $request)
     {
         $validated = $this->validated($request);
         $ids = array_map('intval', $validated['lokasi_ids']);
-        $route = $this->buildRoute($ids);
+        $pekan = array_values($validated['pekan'] ?? []);
+        $route = $this->buildRoute($this->idsVarian($ids, $pekan, 1));
 
-        DB::transaction(function () use ($validated, $request, $ids, $route) {
+        DB::transaction(function () use ($validated, $request, $ids, $pekan, $route) {
             $rute = RuteAngkut::create([
                 'armada_id'      => $validated['armada_id'],
                 'nama'           => $validated['nama'] ?? null,
@@ -133,7 +134,7 @@ class RuteAngkutController extends Controller
                 'total_jarak'    => $route['distance'],
                 'route_geometry' => $route['geometry'],
             ]);
-            $this->syncLokasi($rute, $ids);
+            $this->syncLokasi($rute, $ids, $pekan);
         });
 
         return redirect()->route('admin.rute-angkut.index')
@@ -148,13 +149,14 @@ class RuteAngkutController extends Controller
         ));
     }
 
-    public function update(Request $request, RuteAngkut $ruteAngkut)
+     public function update(Request $request, RuteAngkut $ruteAngkut)
     {
         $validated = $this->validated($request, $ruteAngkut->armada_id);
         $ids = array_map('intval', $validated['lokasi_ids']);
-        $route = $this->buildRoute($ids);
+        $pekan = array_values($validated['pekan'] ?? []);
+        $route = $this->buildRoute($this->idsVarian($ids, $pekan, 1));
 
-        DB::transaction(function () use ($validated, $request, $ids, $route, $ruteAngkut) {
+        DB::transaction(function () use ($validated, $request, $ids, $pekan, $route, $ruteAngkut) {
             $ruteAngkut->update([
                 'armada_id'      => $validated['armada_id'],
                 'nama'           => $validated['nama'] ?? null,
@@ -163,7 +165,7 @@ class RuteAngkutController extends Controller
                 'total_jarak'    => $route['distance'],
                 'route_geometry' => $route['geometry'],
             ]);
-            $this->syncLokasi($ruteAngkut, $ids);
+            $this->syncLokasi($ruteAngkut, $ids, $pekan);
         });
 
         return redirect()->route('admin.rute-angkut.index')
@@ -183,23 +185,26 @@ class RuteAngkutController extends Controller
 
     // === HELPER ===
 
-private function validated(Request $request, ?int $currentArmadaId = null): array
-{
-    return $request->validate([
-        'armada_id'      => ['required', Rule::exists('armadas', 'id')->where(
-            fn ($q) => $q->where('tipe', 'dinas_lh')->orWhere('id', $currentArmadaId)
-        )],
-        'nama'           => ['nullable', 'string', 'max:100'],
-        'hari'           => ['required', Rule::in(self::HARI)],
-        'lokasi_ids'     => ['required', 'array', 'min:1'],
-        'lokasi_ids.*'   => ['integer', 'exists:lokasi_angkuts,id'],
-    ], [
-        'armada_id.exists'    => 'Armada harus bertipe Dinas LH.',
-        'lokasi_ids.required' => 'Pilih minimal satu lokasi pengambilan.',
-        'lokasi_ids.min'      => 'Pilih minimal satu lokasi pengambilan.',
-        'lokasi_ids.*.exists' => 'Ada lokasi yang tidak ditemukan. Muat ulang halaman lalu coba lagi.',
-    ]);
-}
+    private function validated(Request $request, ?int $currentArmadaId = null): array
+    {
+        return $request->validate([
+            'armada_id'      => ['required', Rule::exists('armadas', 'id')->where(
+                fn ($q) => $q->where('tipe', 'dinas_lh')->orWhere('id', $currentArmadaId)
+            )],
+            'nama'           => ['nullable', 'string', 'max:100'],
+            'hari'           => ['required', Rule::in(self::HARI)],
+            'lokasi_ids'     => ['required', 'array', 'min:1'],
+            'lokasi_ids.*'   => ['integer', 'exists:lokasi_angkuts,id'],
+            'pekan'          => ['nullable', 'array'],
+            'pekan.*'        => ['nullable', 'in:1,2'],
+        ], [
+            'armada_id.exists'    => 'Armada harus bertipe Dinas LH.',
+            'lokasi_ids.required' => 'Pilih minimal satu lokasi pengambilan.',
+            'lokasi_ids.min'      => 'Pilih minimal satu lokasi pengambilan.',
+            'lokasi_ids.*.exists' => 'Ada lokasi yang tidak ditemukan. Muat ulang halaman lalu coba lagi.',
+            'pekan.*.in'          => 'Pekan hanya boleh Tiap minggu, Minggu 1, atau Minggu 2.',
+        ]);
+    }
 
     private function formData(?RuteAngkut $rute = null): array
     {
@@ -234,13 +239,17 @@ $lokasiData = LokasiAngkut::query()
 
         $kecamatanList = config('wilayah.kecamatan', []);
         sort($kecamatanList);
-
+        $selectedPekan = collect(old('pekan', $rute
+            ? $rute->lokasis->sortBy('pivot.urutan')->pluck('pivot.pekan')->all()
+            : []))
+            ->map(fn ($p) => $p ? (int) $p : null)->values()->all();
         return [
             'armadas'       => $this->armadaOptions($rute?->armada_id),
             'lokasiData'    => $lokasiData,
             'selectedIds'   => $selectedIds,
             'hariList'      => self::HARI,
             'kecamatanList' => $kecamatanList,
+            'selectedPekan' => $selectedPekan
         ];
     }
 
@@ -275,13 +284,28 @@ private function lokasiDipakai(?int $exceptRuteId = null): array
         ->all();
 }
 
-private function syncLokasi(RuteAngkut $rute, array $ids): void
+private function syncLokasi(RuteAngkut $rute, array $ids, array $pekan = []): void
 {
     $rute->lokasis()->detach();
 
     foreach (array_values($ids) as $i => $id) {
-        $rute->lokasis()->attach($id, ['urutan' => $i + 1]);
+        $p = $pekan[$i] ?? null;
+        $rute->lokasis()->attach($id, ['urutan' => $i + 1, 'pekan' => $p ? (int) $p : null]);
     }
+}
+
+/** Lokasi yang berlaku pada satu varian pekan (tanpa tanda = berlaku di semua pekan). */
+private function idsVarian(array $ids, array $pekan, int $varian): array
+{
+    $out = [];
+    foreach (array_values($ids) as $i => $id) {
+        $p = $pekan[$i] ?? null;
+        if (! $p || (int) $p === $varian) {
+            $out[] = $id;
+        }
+    }
+
+    return $out;
 }
 
     /**
@@ -339,4 +363,5 @@ private function syncLokasi(RuteAngkut $rute, array $ids): void
 
         return 6371 * 2 * atan2(sqrt($h), sqrt(1 - $h));
     }
+ 
 }

@@ -163,6 +163,12 @@
                             <div class="text-xs text-slate-500 mt-0.5 truncate max-w-[220px]" title="{{ $armada->alamat ?? '' }}">
                                 {{ $armada->alamat ?? 'Alamat tidak tersedia' }}
                             </div>
+                                                        @if($armada->isDinasLh())
+                                <div class="text-xs text-emerald-700 mt-0.5">
+                                    {{ $armada->sopir ? 'Sopir: ' . $armada->sopir->nama_lengkap : 'Sopir belum diatur' }}@if($armada->sopir && $armada->sopir->masalahSopir()) <span class="text-amber-600">({{ $armada->sopir->masalahSopir() }})</span>@endif
+                                    · {{ $armada->rutes->count() }} rute
+                                </div>
+                            @endif
                         </td>
 
                         {{-- Tipe --}}
@@ -403,6 +409,23 @@
                         <input type="text" name="telepon" id="telepon"
                             class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm">
                     </div>
+                                        {{-- Sopir default: hanya Dinas LH --}}
+                    <div id="sopir_field_wrapper" class="hidden md:col-span-2">
+                        <label class="block text-xs font-medium text-slate-600 mb-1.5 uppercase tracking-wide">Sopir</label>
+                        <select name="pegawai_id" id="pegawai_id"
+                            class="w-full px-3 py-2.5 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none text-sm bg-white cursor-pointer">
+                            <option value="">Belum diatur</option>
+                            @foreach($pegawaiList as $p)
+                                <option value="{{ $p->id }}">
+                                    {{ $p->nama_lengkap }}{{ $p->user && ! $p->user->canAccessMenu('checkin') ? ' (akun belum punya menu Check-in)' : '' }}
+                                </option>
+                            @endforeach
+                        </select>
+                        <p class="text-xs text-slate-400 mt-1">Hanya pegawai aktif berjabatan {{ \App\Models\Jabatan::NAMA_SOPIR }} yang punya akun aktif. Agar bisa check-in lewat aplikasi, akunnya perlu menu Check-in (atur di Peran).</p>
+                        @if($pegawaiList->isEmpty())
+                            <p class="text-xs text-amber-600 mt-1">Belum ada pegawai yang memenuhi syarat. Pastikan ada pegawai berjabatan {{ \App\Models\Jabatan::NAMA_SOPIR }} yang sudah punya akun pengguna aktif.</p>
+                        @endif
+                    </div>
                 </div>
 
                 {{-- Alamat --}}
@@ -438,7 +461,7 @@
 <div id="detailModal" class="fixed inset-0 z-50 hidden">
     <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeDetail()"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div class="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
             <div class="sticky top-0 bg-white px-6 py-4 border-b border-slate-200 flex justify-between items-center">
                 <h3 class="text-lg font-bold text-slate-900">Detail Armada</h3>
                 <button onclick="closeDetail()" class="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors">
@@ -568,6 +591,9 @@ function handleTipeChange() {
         kondisi.value = '';
     }
 
+    // Sopir default hanya untuk tipe aset (Dinas LH)
+    document.getElementById('sopir_field_wrapper').classList.toggle('hidden', !cfg.aset);
+
     // Pembayaran dikunci "gratis" untuk tipe gratis
     if (cfg.gratis) {
         pembayaranSelect.value = 'gratis';
@@ -610,6 +636,8 @@ function openModal(type, id = null) {
 
     // Reset form
     form.reset();
+    // Buang pilihan sopir sementara dari sesi edit sebelumnya
+    document.querySelectorAll('#pegawai_id option[data-sementara]').forEach(o => o.remove());
     document.getElementById('fotoPreview').innerHTML = `
         <svg class="w-10 h-10 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
     `;
@@ -633,6 +661,7 @@ function openModal(type, id = null) {
         document.getElementById('pembayaran').value = 'bayar';
         document.getElementById('telepon').value = '';
         document.getElementById('alamat').value = '';
+        document.getElementById('pegawai_id').value = '';
 
         // Reset field aset
         document.getElementById('tahun_pengadaan').value = '';
@@ -661,6 +690,15 @@ function openModal(type, id = null) {
         document.getElementById('kondisi').value = data.kondisi || 'baik';
         document.getElementById('telepon').value = data.telepon || '';
         document.getElementById('alamat').value = data.alamat || '';
+        const sopirSelect = document.getElementById('pegawai_id');
+        sopirSelect.value = data.pegawai_id || '';
+        if (data.pegawai_id && sopirSelect.value != data.pegawai_id) {
+            // Sopir terpasang tetapi tidak lagi memenuhi syarat (tidak ada di daftar): tampilkan agar tidak hilang diam-diam
+            const opt = new Option((data.sopir?.nama_lengkap || 'Sopir saat ini') + ' (tidak memenuhi syarat, pilih ulang)', data.pegawai_id);
+            opt.dataset.sementara = '1';
+            sopirSelect.add(opt);
+            sopirSelect.value = data.pegawai_id;
+        }
         document.getElementById('aktif').checked = data.aktif;
 
         if (data.foto) {
@@ -709,6 +747,47 @@ function showDetail(id) {
         return;
     }
     renderDetail(data);
+}
+
+const HARI_URUT = ['Senin', 'Selasa', 'Rabu', 'Kamis', 'Jumat', 'Sabtu', 'Minggu'];
+const escHtml = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+function panelRute(data) {
+    if (!TIPE_CONFIG[data.tipe]?.aset) return '';
+
+    const kelola = '{{ route("admin.rute-angkut.index") }}?armada_id=' + data.id;
+    const rutes = (data.rutes || []).slice()
+        .sort((a, b) => HARI_URUT.indexOf(a.hari) - HARI_URUT.indexOf(b.hari));
+    const hariTerisi = new Set(rutes.filter(r => r.aktif).map(r => r.hari));
+    const kosong = HARI_URUT.filter(h => !hariTerisi.has(h));
+
+    const kartu = rutes.map(r => {
+        const lokasi = (r.lokasis || []).map((l, i) =>
+            `<li class="flex gap-2"><span class="text-slate-400 w-4 text-right shrink-0">${i + 1}.</span>
+             <span>${escHtml(l.nama)}${l.desa ? ` <span class="text-slate-400">· ${escHtml(l.desa)}</span>` : ''}${l.pivot && l.pivot.pekan ? ` <span class="px-1.5 rounded bg-amber-100 text-amber-800 text-[10px] font-semibold">M${l.pivot.pekan}</span>` : ''}</span></li>`
+        ).join('');
+        return `
+            <div class="border border-slate-200 rounded-xl p-3">
+                <div class="flex items-center gap-2 min-w-0">
+                    <span class="px-2 py-0.5 rounded-md text-xs font-semibold bg-slate-100 text-slate-700">${escHtml(r.hari)}</span>
+                    <span class="text-sm font-medium text-slate-800 truncate">${escHtml(r.nama || 'Rute ' + r.hari)}</span>
+                    ${r.aktif ? '' : '<span class="text-xs text-slate-400">(nonaktif)</span>'}
+                </div>
+                <ol class="mt-2 space-y-0.5 text-xs text-slate-600 max-h-32 overflow-y-auto">${lokasi || '<li class="text-slate-400">Belum ada lokasi</li>'}</ol>
+                <p class="mt-1 text-xs text-slate-400">${Number(r.total_jarak || 0).toFixed(2)} km</p>
+            </div>`;
+    }).join('');
+
+    return `
+        <div>
+            <div class="flex items-center justify-between mb-2">
+                <h5 class="text-sm font-bold text-slate-800">Jadwal &amp; Rute</h5>
+                <a href="${kelola}" class="text-xs font-semibold text-emerald-700 hover:underline">Kelola di Rute Pengangkutan →</a>
+            </div>
+            <div class="space-y-2">${kartu || '<p class="text-sm text-slate-400">Belum ada rute untuk armada ini.</p>'}</div>
+            ${rutes.length && kosong.length ? `<p class="mt-2 text-xs text-slate-400">Hari tanpa rute aktif: ${kosong.join(', ')}</p>` : ''}
+            <p class="mt-3 text-xs text-slate-400">Jadwal hanya dapat diubah dari menu Rute Pengangkutan.</p>
+        </div>`;
 }
 
 function renderDetail(data) {
@@ -773,7 +852,11 @@ function renderDetail(data) {
                     <div class="font-semibold text-slate-900">${data.jenis_kendaraan || '-'}</div>
                 </div>
             </div>
-
+            ${tipeCfg.aset ? `
+            <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
+                <div class="text-xs text-slate-500 font-medium uppercase tracking-wide mb-1">Sopir</div>
+                <div class="font-semibold text-slate-900">${data.sopir ? escHtml(data.sopir.nama_lengkap) : 'Belum diatur'}</div>
+            </div>` : ''}
             ${asetInfo}
 
              <div class="bg-slate-50 rounded-xl p-4 border border-slate-100">
@@ -801,7 +884,7 @@ function renderDetail(data) {
                 <svg class="w-4 h-4 text-slate-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
                 <span class="text-slate-700">${data.alamat}</span>
             </div>` : ''}
-
+            ${panelRute(data)}
             <div class="pt-4 border-t border-slate-200 flex justify-end gap-2">
                 <button onclick="closeDetail(); openModal('edit', ${data.id})" class="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors">
                     Edit

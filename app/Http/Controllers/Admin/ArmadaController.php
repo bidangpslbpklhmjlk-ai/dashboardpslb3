@@ -7,6 +7,7 @@ use App\Models\Armada;
 use App\Models\KategoriObjectRetribusi;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use App\Models\Pegawai;
 
 class ArmadaController extends Controller
 {
@@ -34,7 +35,33 @@ class ArmadaController extends Controller
             'foto' => 'nullable|image|max:2048',
             'alamat' => 'nullable|string|max:255',
             'telepon' => 'nullable|string|max:20',
+            'pegawai_id' => ['nullable', 'exists:pegawais,id', $this->aturanSopir($armada)],
         ];
+    }
+
+    /**
+     * Sopir harus pegawai aktif berjabatan Sopir yang punya akun aktif.
+     * Sopir yang SUDAH terpasang di armada ini dibiarkan lolos kalau tidak diganti,
+     * supaya mengubah data lain (misalnya foto) tidak gagal karena data lama.
+     */
+    private function aturanSopir(?Armada $armada): \Closure
+    {
+        return function (string $attribute, $value, \Closure $fail) use ($armada) {
+            if ($value === null || $value === '') {
+                return;
+            }
+            if ($armada && (int) $armada->pegawai_id === (int) $value) {
+                return;
+            }
+
+            $pegawai = Pegawai::with(['jabatan', 'user'])->find($value);
+            $alasan = $pegawai?->masalahSopir();
+
+            if ($alasan) {
+                $fail("{$pegawai->nama_lengkap} tidak bisa dipilih sebagai sopir ({$alasan}). "
+                    . 'Sopir harus pegawai aktif berjabatan ' . \App\Models\Jabatan::NAMA_SOPIR . ' dan punya akun pengguna yang aktif.');
+            }
+        };
     }
 
     private function normalizeData(array $data): array
@@ -55,6 +82,11 @@ class ArmadaController extends Controller
         // Tarif hanya relevan kalau statusnya "bayar"
         if (($data['pembayaran'] ?? '') === 'gratis') {
             $data['kategori_object_retribusi_id'] = null;
+        }
+
+                // Sopir default hanya untuk armada Dinas LH
+        if (array_key_exists('pegawai_id', $data) && ($data['tipe'] ?? '') !== Armada::TIPE_DINAS_LH) {
+            $data['pegawai_id'] = null;
         }
 
         if (!empty($data['nomor_polisi'])) {
@@ -88,7 +120,7 @@ class ArmadaController extends Controller
 
     public function index(Request $request)
     {
-        $query = Armada::with(['kategori']);
+        $query = Armada::with($this->relasiJadwal());
 
         if ($request->filled('search')) {
             $search = $request->search;
@@ -124,7 +156,14 @@ class ArmadaController extends Controller
             ->get()
             ->groupBy('kelompok');
 
-        return view('admin.armada.index', compact('armadas', 'tarifList', 'stats'));
+        // Hanya pegawai aktif berjabatan Sopir yang punya akun aktif.
+        // User + peran dimuat supaya view bisa memberi catatan bila akunnya belum punya menu Check-in.
+        $pegawaiList = Pegawai::sopirBerakun()
+            ->with(['user:id,is_active,role,peran_id,menus', 'user.peran'])
+            ->orderBy('nama_lengkap')
+            ->get(['id', 'nama_lengkap', 'jabatan_id', 'user_id', 'status']);
+
+        return view('admin.armada.index', compact('armadas', 'tarifList', 'stats', 'pegawaiList'));
     }
 
 
@@ -164,7 +203,7 @@ class ArmadaController extends Controller
     public function show(Armada $armada)
     {
         $armada->loadCount(['gatepassLogs', 'invoices']);
-        $armada->load('kategori');
+        $armada->load($this->relasiJadwal());
 
         return response()->json([
             'success' => true,
@@ -239,5 +278,20 @@ class ArmadaController extends Controller
             }
             return redirect()->back()->with('error', 'Gagal menghapus: ' . $e->getMessage());
         }
+    }
+
+        /** Relasi untuk daftar dan detail. Kolom dibatasi supaya route_geometry (besar) tidak ikut terkirim. */
+    private function relasiJadwal(): array
+    {
+        return [
+            'kategori',
+            'sopir:id,nama_lengkap,user_id,jabatan_id,status',
+            'sopir.jabatan:id,nama_jabatan',
+            'sopir.user:id,is_active',
+            'rutes' => fn ($q) => $q->select('id', 'armada_id', 'nama', 'hari', 'total_jarak', 'aktif')
+                ->with(['lokasis' => fn ($l) => $l->select(
+                    'lokasi_angkuts.id', 'lokasi_angkuts.nama', 'lokasi_angkuts.desa', 'lokasi_angkuts.jenis'
+                )]),
+        ];
     }
 }
