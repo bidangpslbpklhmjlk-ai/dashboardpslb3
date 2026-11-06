@@ -35,6 +35,8 @@ use App\Http\Controllers\Admin\DashboardController;
 use App\Http\Controllers\Admin\LoginLogController;
 use App\Http\Controllers\Admin\VersiAplikasiController;
 use App\Http\Controllers\Admin\JadwalArmadaController;
+use App\Http\Controllers\Admin\BankSampahController;
+use App\Http\Controllers\Admin\BsuController;
 
 // ==========================================
 // TES
@@ -248,6 +250,23 @@ Route::middleware('menu:neraca-sampah')->prefix('neraca-sampah')->name('neraca-s
     // Cetak: jenis = neraca | bulanan | area
     Route::get('{laporan}/cetak/{jenis}', [NeracaSampahController::class, 'cetak'])->name('cetak');
     Route::post('{laporan}/import', [NeracaSampahController::class, 'import'])->name('import');
+});
+
+Route::middleware('menu:bank-sampah')->prefix('bank-sampah')->name('bank-sampah.')->group(function () {
+    // Rekap timbangan
+    Route::get('/', [BankSampahController::class, 'index'])->name('index');
+    Route::get('/template', [BankSampahController::class, 'template'])->name('template');
+    Route::post('/import', [BankSampahController::class, 'import'])->name('import');
+
+    // Daftar induk BSU
+    Route::get('/bsu', [BsuController::class, 'index'])->name('bsu.index');
+    Route::get('/bsu/template', [BsuController::class, 'template'])->name('bsu.template');
+    Route::post('/bsu/import', [BsuController::class, 'import'])->name('bsu.import');
+    Route::get('/bsu/create', [BsuController::class, 'create'])->name('bsu.create');
+    Route::post('/bsu', [BsuController::class, 'store'])->name('bsu.store');
+    Route::get('/bsu/{bsu}/edit', [BsuController::class, 'edit'])->name('bsu.edit');
+    Route::put('/bsu/{bsu}', [BsuController::class, 'update'])->name('bsu.update');
+    Route::delete('/bsu/{bsu}', [BsuController::class, 'destroy'])->name('bsu.destroy');
 });
 // --- MASTER INDUSTRI ---
 Route::middleware('menu:industri')->group(function () {

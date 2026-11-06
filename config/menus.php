@@ -36,6 +36,9 @@ return [
    'industri'      => ['label' => 'Data Industri',         'route' => 'admin.industri.index',      'group' => 'Laporan Industri', 'nav' => 'Data Industri'],
 'neraca-sampah' => ['label' => 'Neraca Sampah Industri', 'route' => 'admin.neraca-sampah.index', 'group' => 'Laporan Industri', 'nav' => 'Neraca Sampah'],
 
+    // Persampahan
+    'bank-sampah'   => ['label' => 'Bank Sampah',           'route' => 'admin.bank-sampah.index',   'group' => 'Persampahan'],
+
     // Kepegawaian
     'pegawai'       => ['label' => 'Data Pegawai',          'route' => 'admin.pegawai.index',       'group' => 'Kepegawaian'],
     'jabatan'       => ['label' => 'Jabatan',               'route' => 'admin.jabatan.index',       'group' => 'Kepegawaian'],
