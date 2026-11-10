@@ -31,7 +31,7 @@ class BankSampahImporter
     {
         $book  = IOFactory::load($path);
         $sheet = $book->getSheetByName('Detail Data') ?? $book->getSheet(0);
-        $rows  = $sheet->toArray(null, true, true, false);
+        $rows  = $sheet->toArray(null, true, false, false);
         $c     = $this->bacaHeader($rows);
         $wil   = new WilayahLookup();
 
