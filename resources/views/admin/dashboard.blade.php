@@ -55,15 +55,23 @@
                     @endif
                 </p>
             </div>
-            <form id="formTahun" method="GET" action="{{ route('admin.dashboard') }}" class="flex items-center gap-2">
-                <label for="tahun" class="text-xs font-medium text-green-100">Tahun</label>
-                <select name="tahun" id="tahun" onchange="this.form.requestSubmit()"
-                        class="bg-white text-slate-800 text-sm font-semibold rounded-lg border-0 py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-green-300">
-                    @foreach($tpa['daftarTahun'] as $th)
-                        <option value="{{ $th }}" @selected($th === $tahun)>{{ $th }}</option>
-                    @endforeach
-                </select>
-            </form>
+            <div class="flex items-center gap-3">
+                <form id="formTahun" method="GET" action="{{ route('admin.dashboard') }}" class="flex items-center gap-2">
+                   @if(request()->filled('tahun_bs'))<input type="hidden" name="tahun_bs" value="{{ (int) request('tahun_bs') }}">@endif
+@if(request()->filled('tahun_ind'))<input type="hidden" name="tahun_ind" value="{{ (int) request('tahun_ind') }}">@endif
+                    <label for="tahun" class="text-xs font-medium text-green-100">Tahun</label>
+                    <select name="tahun" id="tahun" onchange="this.form.requestSubmit()"
+                            class="bg-white text-slate-800 text-sm font-semibold rounded-lg border-0 py-1.5 pl-3 pr-8 focus:ring-2 focus:ring-green-300">
+                        @foreach($tpa['daftarTahun'] as $th)
+                            <option value="{{ $th }}" @selected($th === $tahun)>{{ $th }}</option>
+                        @endforeach
+                    </select>
+                </form>
+                @if(auth()->user()->canAccessMenu('gatepass'))
+                    <a href="{{ route('admin.gatepass.index') }}"
+                       class="text-xs font-semibold text-white underline-offset-2 hover:underline">Buka halaman</a>
+                @endif
+            </div>
         </div>
 
         <div class="grid grid-cols-2 lg:grid-cols-4 divide-x divide-y lg:divide-y-0 divide-slate-100">
@@ -129,7 +137,8 @@
         </div>
     </div>
 @endif
-
+   @includeWhen($bankSampah, 'admin.bank-sampah._dashboard')
+   @includeWhen($pelaporan, 'admin.neraca-sampah._dashboard')
 </div>
 
 @if($tpa)

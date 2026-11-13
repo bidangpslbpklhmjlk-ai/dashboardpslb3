@@ -12,6 +12,8 @@ use App\Models\NeracaSampahHarian;
 use App\Models\NeracaSampahLaporan;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
+use App\Services\BankSampahDashboard;
+use App\Services\PelaporanIndustriAnalisis;
 
 class DashboardController extends Controller
 {
@@ -31,7 +33,11 @@ public function index(Request $request)
         'pungutan' => $u->canAccessMenu('pungutan', 'invoice') ? $this->aman(fn () => $this->pungutan()) : null,
         'industri' => $u->canAccessMenu('industri', 'neraca-sampah') ? $this->aman(fn () => $this->industri()) : null,
         'neraca'   => $u->canAccessMenu('neraca-sampah') ? $this->aman(fn () => $this->neraca()) : null,
-    ]);
+        'bankSampah' => $u->canAccessMenu('bank-sampah') ? $this->aman(fn () => app(BankSampahDashboard::class)->data($this->tahunBankSampah($request))) : null,
+        'pelaporan'  => $u->canAccessMenu('neraca-sampah')
+    ? $this->aman(fn () => app(PelaporanIndustriAnalisis::class)->data($this->tahunIndustri($request)))
+    : null,
+        ]);
 }
 
     /** Satu bagian yang error tidak merusak seluruh dashboard. */
@@ -273,5 +279,15 @@ private function bulananTpa(int $tahun): array
     }
 
     return compact('trip', 'ton', 'rataTrip', 'retribusi');
+}
+private function tahunBankSampah(Request $request): int
+{
+    $t = (int) $request->input('tahun_bs', now()->year);
+    return ($t < 2000 || $t > now()->year) ? now()->year : $t;
+}
+private function tahunIndustri(Request $request): int
+{
+    $t = (int) $request->input('tahun_ind', now()->year);
+    return ($t < 2000 || $t > now()->year) ? now()->year : $t;
 }
 }

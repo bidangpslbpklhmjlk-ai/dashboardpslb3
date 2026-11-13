@@ -9,89 +9,14 @@ use Illuminate\Support\Facades\DB;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
+use App\Services\BankSampahRekap;
 
 class BankSampahController extends Controller
 {
 /** Rekap per kecamatan, bisa dibuka sampai desa dan BSU. Filter tahun dan bulan (opsional). */
-public function index(Request $request)
+public function index(Request $request, BankSampahRekap $rekap)
 {
-    $tahun = (int) $request->input('tahun', 2026);
-    $bulan = $request->filled('bulan') ? max(1, min(12, (int) $request->input('bulan'))) : null;
-
-    // Berat per BSU (id => kg) untuk periode terpilih
-    $timbangan = DB::table('bank_sampah_timbangan as t')
-        ->where('t.tahun', $tahun)
-        ->when($bulan, fn ($q) => $q->where('t.bulan', $bulan))
-        ->groupBy('t.bank_sampah_id')
-        ->selectRaw('t.bank_sampah_id, SUM(t.berat_kg) as kg')
-        ->pluck('kg', 'bank_sampah_id');
-
-    $bsu = DB::table('bank_sampah')->orderBy('nama')
-        ->get(['id', 'nama', 'jenis', 'aktif', 'kode_kecamatan', 'kode_desa'])
-        ->map(function ($b) use ($timbangan) {
-            $b->kg = (float) ($timbangan[$b->id] ?? 0);
-            return $b;
-        });
-
-    $bsuPerDesa = $bsu->whereNotNull('kode_desa')->groupBy('kode_desa');
-    $unitPerKec = $bsu->whereNull('kode_desa')->whereNotNull('kode_kecamatan')->groupBy('kode_kecamatan');
-    $desaPerKec = DB::table('wilayah_desa')->orderBy('nama')
-        ->get(['kode', 'kode_kecamatan', 'nama'])->groupBy('kode_kecamatan');
-
-    $rekap = DB::table('wilayah_kecamatan')->orderBy('nama')->get()
-        ->map(function ($k) use ($desaPerKec, $bsuPerDesa, $unitPerKec) {
-            $desa = ($desaPerKec[$k->kode] ?? collect())->map(function ($d) use ($bsuPerDesa) {
-                $daftar = $bsuPerDesa[$d->kode] ?? collect();
-                $kg     = (float) $daftar->sum('kg');
-                return (object) [
-                    'kode'       => $d->kode,
-                    'nama'       => $d->nama,
-                    'bsu'        => $daftar->values(),
-                    'jumlah_bsu' => $daftar->where('aktif', true)->count(),
-                    'kg'         => $kg,
-                    'aktif'      => $kg > 0,
-                ];
-            })->values();
-
-            $unit   = ($unitPerKec[$k->kode] ?? collect())->values();
-            $aktif  = $desa->where('aktif', true)->count();
-            $kgDesa = (float) $desa->sum('kg');
-            $kgUnit = (float) $unit->sum('kg');
-
-            return (object) [
-                'kode'        => $k->kode,
-                'nama'        => $k->nama,
-                'desa'        => $desa,
-                'unit'        => $unit,
-                'jumlah_desa' => $desa->count(),
-                'jumlah_bsu'  => $desa->sum('jumlah_bsu') + $unit->where('aktif', true)->count(),
-                'desa_aktif'  => $aktif,
-                'desa_belum'  => $desa->count() - $aktif,
-                'persen'      => $desa->count() ? (int) round($aktif / $desa->count() * 100) : 0,
-                'kg_desa'     => $kgDesa,
-                'kg_unit'     => $kgUnit,
-                'kg_total'    => $kgDesa + $kgUnit,
-            ];
-        });
-
-    // Unit tingkat kabupaten (tanpa kecamatan dan desa), mis. PKK Kabupaten
-    $kabupaten = $bsu->whereNull('kode_kecamatan')->whereNull('kode_desa')->sortBy('nama')->values();
-
-    $total = (object) [
-        'desa'      => (float) $rekap->sum('kg_desa'),
-        'unit_kec'  => (float) $rekap->sum('kg_unit'),
-        'kabupaten' => (float) $kabupaten->sum('kg'),
-    ];
-    $total->semua = $total->desa + $total->unit_kec + $total->kabupaten;
-
-    $bsuAktif = $bsu->where('aktif', true)->count();
-
-    // Tren 12 bulan untuk tahun terpilih (tidak terpengaruh filter bulan)
-    $perBulan = DB::table('bank_sampah_timbangan')->where('tahun', $tahun)
-        ->groupBy('bulan')->selectRaw('bulan, SUM(berat_kg) as kg')->pluck('kg', 'bulan');
-    $tren = collect(range(1, 12))->map(fn ($m) => (float) ($perBulan[$m] ?? 0));
-
-    return view('admin.bank-sampah.index', compact('rekap', 'tahun', 'bulan', 'total', 'kabupaten', 'bsuAktif', 'tren'));
+    return view('admin.bank-sampah.index', $rekap->susun($request));
 }
 
     /** Unduh template Excel untuk impor. Sheet "Detail Data" yang dibaca importer. */

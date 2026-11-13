@@ -24,7 +24,7 @@
     @if(session('error'))
         <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">{{ session('error') }}</div>
     @endif
-
+   @include('admin.neraca-sampah._analisis-pelaporan')
     {{-- Pencarian --}}
     <form method="GET" action="{{ route('admin.industri.index') }}" class="flex gap-2">
         <input type="text" name="q" value="{{ $q }}" placeholder="Cari nama, alamat, atau kecamatan"
